@@ -14,7 +14,6 @@ jobs:
           mkdir -p app/src/main/res/values
           mkdir -p gradle/wrapper
           
-          # 1. gradle-wrapper.properties (LE FICHIER MANQUANT !)
           cat <<EOF > gradle/wrapper/gradle-wrapper.properties
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
@@ -25,7 +24,6 @@ jobs:
           zipStorePath=wrapper/dists
           EOF
 
-          # 2. settings.gradle.kts
           cat <<EOF > settings.gradle.kts
           pluginManagement {
               repositories { google(); mavenCentral(); gradlePluginPortal() }
@@ -38,7 +36,6 @@ jobs:
           include(":app")
           EOF
 
-          # 3. build.gradle.kts (racine)
           cat <<EOF > build.gradle.kts
           plugins {
               id("com.android.application") version "8.5.0" apply false
@@ -46,7 +43,6 @@ jobs:
           }
           EOF
 
-          # 4. app/build.gradle.kts
           cat <<EOF > app/build.gradle.kts
           plugins {
               id("com.android.application")
@@ -87,7 +83,6 @@ jobs:
           }
           EOF
 
-          # 5. AndroidManifest.xml
           cat <<EOF > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -106,7 +101,6 @@ jobs:
           </manifest>
           EOF
 
-          # 6. MainActivity.kt
           cat <<EOF > app/src/main/java/com/floraxdz/app/MainActivity.kt
           package com.floraxdz.app
 
@@ -150,7 +144,6 @@ jobs:
           }
           EOF
 
-          # 7. Fichiers de ressources
           cat <<EOF > app/src/main/res/values/strings.xml
           <resources>
               <string name="app_name">FloraXDZ</string>
@@ -164,20 +157,19 @@ jobs:
           EOF
 
           touch app/proguard-rules.pro
-
-          # 8. Gradle wrapper (téléchargement)
-          curl -L https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
-          curl -L https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradlew -o gradlew
-          chmod +x gradlew
-
           echo "✅ Projet FloraXDZ généré !"
-      
+
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug
