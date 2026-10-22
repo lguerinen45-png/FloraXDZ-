@@ -14,7 +14,18 @@ jobs:
           mkdir -p app/src/main/res/values
           mkdir -p gradle/wrapper
           
-          # 1. Configuration Gradle
+          # 1. gradle-wrapper.properties (LE FICHIER MANQUANT !)
+          cat <<EOF > gradle/wrapper/gradle-wrapper.properties
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-bin.zip
+          networkTimeout=10000
+          validateDistributionUrl=true
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+
+          # 2. settings.gradle.kts
           cat <<EOF > settings.gradle.kts
           pluginManagement {
               repositories { google(); mavenCentral(); gradlePluginPortal() }
@@ -27,6 +38,7 @@ jobs:
           include(":app")
           EOF
 
+          # 3. build.gradle.kts (racine)
           cat <<EOF > build.gradle.kts
           plugins {
               id("com.android.application") version "8.5.0" apply false
@@ -34,6 +46,7 @@ jobs:
           }
           EOF
 
+          # 4. app/build.gradle.kts
           cat <<EOF > app/build.gradle.kts
           plugins {
               id("com.android.application")
@@ -74,16 +87,15 @@ jobs:
           }
           EOF
 
-          # 2. AndroidManifest.xml
+          # 5. AndroidManifest.xml
           cat <<EOF > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application
                   android:allowBackup="true"
-                  android:icon="@mipmap/ic_launcher"
                   android:label="FloraXDZ"
                   android:supportsRtl="true"
-                  android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+                  android:theme="@style/Theme.FloraXDZ">
                   <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
@@ -94,7 +106,7 @@ jobs:
           </manifest>
           EOF
 
-          # 3. MainActivity.kt (Le code de l'écran d'accueil)
+          # 6. MainActivity.kt
           cat <<EOF > app/src/main/java/com/floraxdz/app/MainActivity.kt
           package com.floraxdz.app
 
@@ -138,7 +150,7 @@ jobs:
           }
           EOF
 
-          # 4. Fichiers de ressources
+          # 7. Fichiers de ressources
           cat <<EOF > app/src/main/res/values/strings.xml
           <resources>
               <string name="app_name">FloraXDZ</string>
@@ -153,12 +165,12 @@ jobs:
 
           touch app/proguard-rules.pro
 
-          # 5. Téléchargement des outils de compilation (Gradle)
+          # 8. Gradle wrapper (téléchargement)
           curl -L https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
           curl -L https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradlew -o gradlew
           chmod +x gradlew
 
-          echo "✅ Projet FloraXDZ généré avec succès !"
+          echo "✅ Projet FloraXDZ généré !"
       
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -170,7 +182,7 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: FloraXDZ-Application
