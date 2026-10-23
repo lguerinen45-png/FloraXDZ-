@@ -84,7 +84,7 @@ fun SplashScreen() {
             Spacer(modifier = Modifier.height(24.dp))
             Text("Pr. GUERINE Lakhdar", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Algérie 🇩🇿", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
+            Text("Algérie 🇿", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
         }
     }
 }
@@ -94,24 +94,14 @@ fun MainScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Vérification de la permission caméra
+    // 1. Vérification de la permission caméra
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
 
-    // Lanceur pour demander la permission
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasCameraPermission = isGranted
-        if (isGranted) {
-            cameraLauncher.launch(null)
-        }
-    }
-
-    // Lanceur pour la caméra
+    // 2. Lanceur pour la caméra (Défini AVANT la permission)
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
         if (bitmap != null) {
             selectedBitmap = bitmap
@@ -119,11 +109,21 @@ fun MainScreen() {
         }
     }
 
-    // Lanceur pour la galerie
+    // 3. Lanceur pour la galerie
     val galleryLauncher = rememberLauncherForActivityResult(PickVisualMedia()) { uri: Uri? ->
         if (uri != null) {
             selectedImageUri = uri
             selectedBitmap = null
+        }
+    }
+
+    // 4. Lanceur pour demander la permission (Défini APRÈS la caméra)
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission = isGranted
+        if (isGranted) {
+            cameraLauncher.launch(null)
         }
     }
 
