@@ -18,18 +18,20 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Download Gradle Wrapper files
+        run: |
+          curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradlew -o gradlew
+          curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+          chmod +x gradlew
+
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
       - name: Build with Gradle
-        uses: gradle/gradle-build-action@v3
-        with:
-          arguments: assembleDebug
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: FloraXDZ-Application
