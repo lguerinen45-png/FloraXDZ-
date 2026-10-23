@@ -1,5 +1,7 @@
 package com.floraxdz.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -27,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -91,6 +94,24 @@ fun MainScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // Vérification de la permission caméra
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    // Lanceur pour demander la permission
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission = isGranted
+        if (isGranted) {
+            cameraLauncher.launch(null)
+        }
+    }
+
+    // Lanceur pour la caméra
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
         if (bitmap != null) {
             selectedBitmap = bitmap
@@ -98,6 +119,7 @@ fun MainScreen() {
         }
     }
 
+    // Lanceur pour la galerie
     val galleryLauncher = rememberLauncherForActivityResult(PickVisualMedia()) { uri: Uri? ->
         if (uri != null) {
             selectedImageUri = uri
@@ -107,7 +129,7 @@ fun MainScreen() {
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("", fontSize = 64.sp)
+            Text("🌿", fontSize = 64.sp)
             Spacer(modifier = Modifier.height(16.dp))
             Text("FloraXDZ", fontWeight = FontWeight.Bold, fontSize = 36.sp, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
@@ -115,11 +137,19 @@ fun MainScreen() {
             Spacer(modifier = Modifier.height(32.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Button(onClick = { cameraLauncher.launch(null) }, modifier = Modifier.weight(1f)) {
+                // Bouton Caméra avec gestion de la permission
+                Button(onClick = {
+                    if (hasCameraPermission) {
+                        cameraLauncher.launch(null)
+                    } else {
+                        permissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                }, modifier = Modifier.weight(1f)) {
                     Text("📷", fontSize = 24.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Caméra")
                 }
+                
                 Button(onClick = { galleryLauncher.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)) {
                     Text("🖼️", fontSize = 24.sp)
                     Spacer(modifier = Modifier.width(8.dp))
