@@ -58,6 +58,7 @@ var selectedImageUri by mutableStateOf<Uri?>(null)
 var selectedBitmap by mutableStateOf<Bitmap?>(null)
 var identificationResult by mutableStateOf<String?>(null)
 var isProcessing by mutableStateOf(false)
+var selectedOrgan by mutableStateOf("auto") // auto, leaf, flower, fruit, bark, stem
 
 @Composable
 fun FloraXDZApp() {
@@ -84,7 +85,7 @@ fun SplashScreen() {
             Spacer(modifier = Modifier.height(24.dp))
             Text("Pr. GUERINE Lakhdar", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Algérie 🇿", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
+            Text("Algérie 🇩🇿", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
         }
     }
 }
@@ -94,14 +95,12 @@ fun MainScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // 1. Vérification de la permission caméra
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
 
-    // 2. Lanceur pour la caméra (Défini AVANT la permission)
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
         if (bitmap != null) {
             selectedBitmap = bitmap
@@ -109,7 +108,6 @@ fun MainScreen() {
         }
     }
 
-    // 3. Lanceur pour la galerie
     val galleryLauncher = rememberLauncherForActivityResult(PickVisualMedia()) { uri: Uri? ->
         if (uri != null) {
             selectedImageUri = uri
@@ -117,7 +115,6 @@ fun MainScreen() {
         }
     }
 
-    // 4. Lanceur pour demander la permission (Défini APRÈS la caméra)
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -127,6 +124,8 @@ fun MainScreen() {
         }
     }
 
+    val organs = listOf("auto" to "Automatique", "leaf" to " Feuille", "flower" to "🌸 Fleur", "fruit" to "🍎 Fruit", "bark" to "🌳 Écorce", "stem" to "🌱 Tige")
+
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("🌿", fontSize = 64.sp)
@@ -134,10 +133,58 @@ fun MainScreen() {
             Text("FloraXDZ", fontWeight = FontWeight.Bold, fontSize = 36.sp, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
             Text("Identifiez les plantes en Algérie", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Menu déroulant pour choisir l'organe
+            var expanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded }
+            ) {
+                TextField(
+                    value = organs.first { it.first == selectedOrgan }.second,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Organe de la plante") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    organs.forEach { (value, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                selectedOrgan = value
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Conseils photo
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5DC))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("📸 Conseils pour une meilleure identification :", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("• Photo nette et bien éclairée", fontSize = 12.sp)
+                    Text("• Un seul organe (feuille OU fleur)", fontSize = 12.sp)
+                    Text("• La plante doit remplir 70% de la photo", fontSize = 12.sp)
+                    Text("• Fond neutre si possible", fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Bouton Caméra avec gestion de la permission
                 Button(onClick = {
                     if (hasCameraPermission) {
                         cameraLauncher.launch(null)
@@ -172,7 +219,7 @@ fun MainScreen() {
                 Button(onClick = {
                     isProcessing = true
                     identificationResult = "Analyse en cours..."
-                    scope.launch { identifyPlantFromBitmap(bitmap) }
+                    scope.launch { identifyPlantFromBitmap(bitmap, selectedOrgan) }
                 }, modifier = Modifier.fillMaxWidth(), enabled = !isProcessing) {
                     if (isProcessing) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
@@ -197,7 +244,7 @@ fun MainScreen() {
     }
 }
 
-suspend fun identifyPlantFromBitmap(bitmap: Bitmap) {
+suspend fun identifyPlantFromBitmap(bitmap: Bitmap, organ: String) {
     try {
         withContext(Dispatchers.IO) {
             val outputStream = ByteArrayOutputStream()
@@ -207,7 +254,10 @@ suspend fun identifyPlantFromBitmap(bitmap: Bitmap) {
             val client = OkHttpClient.Builder().connectTimeout(45, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).writeTimeout(45, TimeUnit.SECONDS).build()
             val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
             val multipartBody = MultipartBody.Builder().setType(MultipartBody.FORM).addFormDataPart("images", "plant.jpg", requestBody).build()
-            val request = Request.Builder().url("https://my-api.plantnet.org/v2/identify/all?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr").post(multipartBody).build()
+            
+            // URL avec le paramètre d'organe
+            val url = "https://my-api.plantnet.org/v2/identify/$organ?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr"
+            val request = Request.Builder().url(url).post(multipartBody).build()
 
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string()
