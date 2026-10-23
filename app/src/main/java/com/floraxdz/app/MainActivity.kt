@@ -1,7 +1,5 @@
 package com.floraxdz.app
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -32,7 +30,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,10 +54,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// Variables globales pour gérer l'état
 var selectedImageUri by mutableStateOf<Uri?>(null)
+var selectedBitmap by mutableStateOf<Bitmap?>(null) // Pour la caméra
 var identificationResult by mutableStateOf<String?>(null)
 var isProcessing by mutableStateOf(false)
-var hasCameraPermission by mutableStateOf(false)
 
 @Composable
 fun FloraXDZApp() {
@@ -94,7 +92,7 @@ fun SplashScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(32.dp)
         ) {
-            Text("", fontSize = 100.sp)
+            Text("🌿", fontSize = 100.sp)
             Spacer(modifier = Modifier.height(24.dp))
             Text("Université de Naâma", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(8.dp))
@@ -102,7 +100,7 @@ fun SplashScreen() {
             Spacer(modifier = Modifier.height(24.dp))
             Text("Pr. GUERINE Lakhdar", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Algérie 🇩🇿", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
+            Text("Algérie 🇿", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
         }
     }
 }
@@ -112,37 +110,24 @@ fun MainScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
-    // Vérifier la permission caméra au démarrage
-    LaunchedEffect(Unit) {
-        hasCameraPermission = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-    
-    // Lanceur pour la caméra
+    // Lanceur pour la caméra (renvoie un Bitmap)
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
-        bitmap?.let {
-            // Convertir le bitmap en URI temporaire pour l'affichage
-            selectedImageUri = null // On reset l'URI car on a un bitmap direct
-            // Pour simplifier, on stocke le bitmap dans une variable globale ou on gère différemment
-            // Ici, on va utiliser une astuce : on affiche directement le bitmap si l'URI est null
+        if (bitmap != null) {
+            selectedBitmap = bitmap
+            selectedImageUri = null // On reset l'URI
         }
     }
     
-    // Lanceur pour la galerie
+    // Lanceur pour la galerie (renvoie une URI)
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = PickVisualMedia()
     ) { uri: Uri? ->
-        selectedImageUri = uri
-    }
-    
-    // Demande de permission caméra
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasCameraPermission = isGranted
+        if (uri != null) {
+            selectedImageUri = uri
+            selectedBitmap = null // On reset le Bitmap
+        }
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -153,7 +138,7 @@ fun MainScreen() {
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("🌿", fontSize = 64.sp)
+            Text("", fontSize = 64.sp)
             Spacer(modifier = Modifier.height(16.dp))
             Text("FloraXDZ", fontWeight = FontWeight.Bold, fontSize = 36.sp, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
@@ -166,13 +151,7 @@ fun MainScreen() {
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Button(
-                    onClick = {
-                        if (hasCameraPermission) {
-                            cameraLauncher.launch(null)
-                        } else {
-                            permissionLauncher.launch(Manifest.permission.CAMERA)
-                        }
-                    },
+                    onClick = { cameraLauncher.launch(null) },
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.CameraAlt, contentDescription = "Caméra")
@@ -181,9 +160,7 @@ fun MainScreen() {
                 }
                 
                 Button(
-                    onClick = {
-                        galleryLauncher.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
-                    },
+                    onClick = { galleryLauncher.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                 ) {
@@ -196,51 +173,44 @@ fun MainScreen() {
             Spacer(modifier = Modifier.height(24.dp))
             
             // Affichage de l'image (depuis URI ou Bitmap)
-            // Note: Pour cette version simple, on gère surtout l'URI. 
-            // Si vous prenez une photo, elle s'affichera via un mécanisme interne de Compose
+            val imageToShow = selectedBitmap ?: selectedImageUri?.let { uri ->
+                try {
+                    val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
+                    BitmapFactory.decodeStream(inputStream)
+                } catch (e: Exception) { null }
+            }
             
-            selectedImageUri?.let { uri ->
-                val bitmap = remember(uri) {
-                    try {
-                        val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-                        BitmapFactory.decodeStream(inputStream)
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
+            imageToShow?.let { bitmap ->
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Plante sélectionnée",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    contentScale = ContentScale.Crop
+                )
                 
-                bitmap?.let {
-                    Image(
-                        bitmap = it.asImageBitmap(),
-                        contentDescription = "Plante sélectionnée",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp),
-                        contentScale = ContentScale.Crop
-                    )
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    Button(
-                        onClick = {
-                            isProcessing = true
-                            identificationResult = "Analyse en cours..."
-                            scope.launch {
-                                identifyPlant(context, uri)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isProcessing
-                    ) {
-                        if (isProcessing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Button(
+                    onClick = {
+                        isProcessing = true
+                        identificationResult = "Analyse en cours..."
+                        scope.launch {
+                            identifyPlantFromBitmap(context, bitmap)
                         }
-                        Text(if (isProcessing) "Identification..." else "Identifier la plante")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isProcessing
+                ) {
+                    if (isProcessing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
+                    Text(if (isProcessing) "Identification..." else "Identifier la plante")
                 }
             }
             
@@ -262,75 +232,71 @@ fun MainScreen() {
     }
 }
 
-suspend fun identifyPlant(context: android.content.Context, uri: Uri) {
+// Nouvelle fonction qui accepte directement un Bitmap
+suspend fun identifyPlantFromBitmap(context: android.content.Context, bitmap: Bitmap) {
     try {
         withContext(Dispatchers.IO) {
-            val inputStream = context.contentResolver.openInputStream(uri)
-            val originalBitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream?.close()
-            
-            if (originalBitmap != null) {
-                val outputStream = ByteArrayOutputStream()
-                originalBitmap.compress(Bitmap.CompressFormat.JPEG, 50, outputStream)
-                val byteArray = outputStream.toByteArray()
+            // Compresser le bitmap directement
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 50, outputStream)
+            val byteArray = outputStream.toByteArray()
 
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(45, TimeUnit.SECONDS)
-                    .readTimeout(45, TimeUnit.SECONDS)
-                    .writeTimeout(45, TimeUnit.SECONDS)
-                    .build()
+            val client = OkHttpClient.Builder()
+                .connectTimeout(45, TimeUnit.SECONDS)
+                .readTimeout(45, TimeUnit.SECONDS)
+                .writeTimeout(45, TimeUnit.SECONDS)
+                .build()
+            
+            val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
+            
+            val multipartBody = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("images", "plant.jpg", requestBody)
+                .build()
+            
+            val request = Request.Builder()
+                .url("https://my-api.plantnet.org/v2/identify/all?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr")
+                .post(multipartBody)
+                .build()
+            
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+            
+            if (response.isSuccessful && responseBody != null) {
+                val json = JSONObject(responseBody)
+                val results = json.getJSONArray("results")
                 
-                val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
-                
-                val multipartBody = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addFormDataPart("images", "plant.jpg", requestBody)
-                    .build()
-                
-                val request = Request.Builder()
-                    .url("https://my-api.plantnet.org/v2/identify/all?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr")
-                    .post(multipartBody)
-                    .build()
-                
-                val response = client.newCall(request).execute()
-                val responseBody = response.body?.string()
-                
-                if (response.isSuccessful && responseBody != null) {
-                    val json = JSONObject(responseBody)
-                    val results = json.getJSONArray("results")
+                var resultText = ""
+                for (i in 0 until minOf(results.length(), 3)) {
+                    val result = results.getJSONObject(i)
+                    val species = result.getJSONObject("species")
+                    val scientificName = species.getString("scientificNameWithoutAuthor")
+                    val commonNames = species.optJSONArray("commonNames")
+                    val commonName = if (commonNames != null && commonNames.length() > 0) {
+                        commonNames.getString(0)
+                    } else {
+                        "Nom commun non disponible"
+                    }
+                    val score = result.getDouble("score")
+                    val confidence = (score * 100).toInt()
                     
-                    var resultText = ""
-                    for (i in 0 until minOf(results.length(), 3)) {
-                        val result = results.getJSONObject(i)
-                        val species = result.getJSONObject("species")
-                        val scientificName = species.getString("scientificNameWithoutAuthor")
-                        val commonNames = species.optJSONArray("commonNames")
-                        val commonName = if (commonNames != null && commonNames.length() > 0) {
-                            commonNames.getString(0)
-                        } else {
-                            "Nom commun non disponible"
-                        }
-                        val score = result.getDouble("score")
-                        val confidence = (score * 100).toInt()
-                        
-                        resultText += "${i + 1}. $commonName\n"
-                        resultText += "   Nom scientifique: $scientificName\n"
-                        resultText += "   Confiance: $confidence%\n\n"
+                    resultText += "${i + 1}. $commonName\n"
+                    resultText += "   Nom scientifique: $scientificName\n"
+                    resultText += "   Confiance: $confidence%\n\n"
+                }
+                
+                withContext(Dispatchers.Main) {
+                    identificationResult = if (resultText.isNotEmpty()) {
+                        resultText.trimEnd()
+                    } else {
+                        "Aucun résultat trouvé. Essayez une autre photo."
                     }
-                    
-                    withContext(Dispatchers.Main) {
-                        identificationResult = if (resultText.isNotEmpty()) {
-                            resultText.trimEnd()
-                        } else {
-                            "Aucun résultat trouvé. Essayez une autre photo."
-                        }
-                        isProcessing = false
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        identificationResult = "Erreur du serveur PlantNet. Code: ${response.code}"
-                        isProcessing = false
-                    }
+                    isProcessing = false
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    identificationResult = "Erreur du serveur PlantNet. Code: ${response.code}"
+                    isProcessing = false
                 }
             }
         }
