@@ -1,5 +1,6 @@
 package com.floraxdz.app
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
@@ -31,6 +32,7 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
@@ -115,7 +117,7 @@ fun MainScreen() {
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("", fontSize = 64.sp)
+            Text("🌿", fontSize = 64.sp)
             Spacer(modifier = Modifier.height(16.dp))
             Text("FloraXDZ", fontWeight = FontWeight.Bold, fontSize = 36.sp, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
@@ -158,7 +160,7 @@ fun MainScreen() {
                     Button(
                         onClick = {
                             isProcessing = true
-                            identificationResult = null
+                            identificationResult = "Connexion à PlantNet en cours..."
                             scope.launch {
                                 identifyPlant(context, uri)
                             }
@@ -173,7 +175,7 @@ fun MainScreen() {
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                         }
-                        Text(if (isProcessing) "Identification en cours..." else "Identifier la plante")
+                        Text(if (isProcessing) "Analyse en cours..." else "Identifier la plante")
                     }
                 }
             }
@@ -200,15 +202,19 @@ suspend fun identifyPlant(context: android.content.Context, uri: Uri) {
     try {
         withContext(Dispatchers.IO) {
             val inputStream = context.contentResolver.openInputStream(uri)
-            val byteArray = inputStream?.readBytes()
+            val originalBitmap = BitmapFactory.decodeStream(inputStream)
             inputStream?.close()
             
-            if (byteArray != null) {
-                // Client HTTP avec timeout augmenté à 30 secondes
+            if (originalBitmap != null) {
+                // COMPRESSER L'IMAGE POUR UN ENVOI PLUS RAPIDE
+                val outputStream = ByteArrayOutputStream()
+                originalBitmap.compress(Bitmap.CompressFormat.JPEG, 50, outputStream)
+                val byteArray = outputStream.toByteArray()
+
                 val client = OkHttpClient.Builder()
-                    .connectTimeout(30, TimeUnit.SECONDS)
-                    .readTimeout(30, TimeUnit.SECONDS)
-                    .writeTimeout(30, TimeUnit.SECONDS)
+                    .connectTimeout(45, TimeUnit.SECONDS)
+                    .readTimeout(45, TimeUnit.SECONDS)
+                    .writeTimeout(45, TimeUnit.SECONDS)
                     .build()
                 
                 val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
@@ -259,7 +265,7 @@ suspend fun identifyPlant(context: android.content.Context, uri: Uri) {
                     }
                 } else {
                     withContext(Dispatchers.Main) {
-                        identificationResult = "Erreur du serveur PlantNet. Code: ${response.code}\nVérifiez votre connexion internet et réessayez."
+                        identificationResult = "Erreur du serveur PlantNet. Code: ${response.code}"
                         isProcessing = false
                     }
                 }
@@ -267,17 +273,17 @@ suspend fun identifyPlant(context: android.content.Context, uri: Uri) {
         }
     } catch (e: java.net.SocketTimeoutException) {
         withContext(Dispatchers.Main) {
-            identificationResult = "Timeout: La connexion a pris trop de temps.\nVérifiez votre connexion internet et réessayez."
+            identificationResult = "La connexion est trop lente.\nEssayez de passer du WiFi à la 4G (ou inversement)."
             isProcessing = false
         }
     } catch (e: java.net.UnknownHostException) {
         withContext(Dispatchers.Main) {
-            identificationResult = "Impossible de contacter PlantNet.\nVérifiez que vous avez une connexion internet active (WiFi ou données mobiles)."
+            identificationResult = "Pas de connexion internet.\nVérifiez votre WiFi ou vos données mobiles."
             isProcessing = false
         }
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
-            identificationResult = "Erreur: ${e.message}\nVérifiez votre connexion internet."
+            identificationResult = "Erreur: ${e.message}"
             isProcessing = false
         }
     }
