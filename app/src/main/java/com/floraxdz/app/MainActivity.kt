@@ -36,7 +36,7 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
-const val PLANTNET_API_KEY = "2b101jvJGNIYa6n1Vp1TmrV5u"
+const val PLANTNET_API_KEY = "2b101jvIJGNlYa6n1Vp1TmrV5u"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
