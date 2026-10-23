@@ -1,11 +1,12 @@
 package com.floraxdz.app
 
-import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -27,6 +28,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.InputStream
 
@@ -87,7 +90,7 @@ fun SplashScreen() {
             Spacer(modifier = Modifier.height(24.dp))
             Text("Pr. GUERINE Lakhdar", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Algérie 🇩", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
+            Text("Algérie 🇩🇿", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
         }
     }
 }
@@ -96,6 +99,13 @@ fun SplashScreen() {
 fun MainScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    
+    // Méthode moderne et fiable pour choisir une image dans Compose
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        selectedImageUri = uri
+    }
     
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -114,9 +124,7 @@ fun MainScreen() {
             
             Button(
                 onClick = {
-                    val intent = Intent(Intent.ACTION_GET_CONTENT)
-                    intent.type = "image/*"
-                    context.startActivity(Intent.createChooser(intent, "Sélectionner une image"))
+                    imagePickerLauncher.launch("image/*")
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -197,8 +205,9 @@ suspend fun identifyPlant(context: android.content.Context, uri: Uri) {
             
             if (byteArray != null) {
                 val client = OkHttpClient()
-                val mediaType = MediaType.parse("image/jpeg")
-                val requestBody = RequestBody.create(mediaType, byteArray)
+                
+                // SYNTAXE CORRECTE ET MODERNE POUR OKHTTP 4.X
+                val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
                 
                 val multipartBody = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
