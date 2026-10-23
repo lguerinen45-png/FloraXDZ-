@@ -1,7 +1,6 @@
 package com.floraxdz.app
 
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
@@ -19,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -27,21 +27,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.asRequestBody
 import org.json.JSONObject
 import java.io.InputStream
 
 const val PLANTNET_API_KEY = "2b101jvJGNIYa6n1Vp1TmrV5u"
 
 class MainActivity : ComponentActivity() {
-    
-    private val imagePickerLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { selectedImageUri = it }
-    }
-    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -96,14 +87,14 @@ fun SplashScreen() {
             Spacer(modifier = Modifier.height(24.dp))
             Text("Pr. GUERINE Lakhdar", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Algérie 🇩🇿", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
+            Text("Algérie 🇩", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
         }
     }
 }
 
 @Composable
 fun MainScreen() {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -206,15 +197,17 @@ suspend fun identifyPlant(context: android.content.Context, uri: Uri) {
             
             if (byteArray != null) {
                 val client = OkHttpClient()
+                val mediaType = MediaType.parse("image/jpeg")
+                val requestBody = RequestBody.create(mediaType, byteArray)
                 
-                val requestBody = MultipartBody.Builder()
+                val multipartBody = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
-                    .addFormDataPart("images", "plant.jpg", byteArray.toRequestBody("image/jpeg".toMediaType()))
+                    .addFormDataPart("images", "plant.jpg", requestBody)
                     .build()
                 
                 val request = Request.Builder()
                     .url("https://my-api.plantnet.org/v2/identify/all?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr")
-                    .post(requestBody)
+                    .post(multipartBody)
                     .build()
                 
                 val response = client.newCall(request).execute()
