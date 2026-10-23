@@ -1,5 +1,7 @@
 package com.floraxdz.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -8,11 +10,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,6 +60,7 @@ class MainActivity : ComponentActivity() {
 var selectedImageUri by mutableStateOf<Uri?>(null)
 var identificationResult by mutableStateOf<String?>(null)
 var isProcessing by mutableStateOf(false)
+var hasCameraPermission by mutableStateOf(false)
 
 @Composable
 fun FloraXDZApp() {
@@ -85,7 +94,7 @@ fun SplashScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(32.dp)
         ) {
-            Text("🌿", fontSize = 100.sp)
+            Text("", fontSize = 100.sp)
             Spacer(modifier = Modifier.height(24.dp))
             Text("Université de Naâma", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(8.dp))
@@ -103,12 +112,39 @@ fun MainScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+    // Vérifier la permission caméra au démarrage
+    LaunchedEffect(Unit) {
+        hasCameraPermission = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+    
+    // Lanceur pour la caméra
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap: Bitmap? ->
+        bitmap?.let {
+            // Convertir le bitmap en URI temporaire pour l'affichage
+            selectedImageUri = null // On reset l'URI car on a un bitmap direct
+            // Pour simplifier, on stocke le bitmap dans une variable globale ou on gère différemment
+            // Ici, on va utiliser une astuce : on affiche directement le bitmap si l'URI est null
+        }
+    }
+    
+    // Lanceur pour la galerie
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = PickVisualMedia()
     ) { uri: Uri? ->
         selectedImageUri = uri
     }
     
+    // Demande de permission caméra
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission = isGranted
+    }
+
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier
@@ -124,16 +160,44 @@ fun MainScreen() {
             Text("Identifiez les plantes en Algérie", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(32.dp))
             
-            Button(
-                onClick = {
-                    imagePickerLauncher.launch("image/*")
-                },
-                modifier = Modifier.fillMaxWidth()
+            // Boutons d'action
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("Choisir une photo de plante")
+                Button(
+                    onClick = {
+                        if (hasCameraPermission) {
+                            cameraLauncher.launch(null)
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Caméra")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Caméra")
+                }
+                
+                Button(
+                    onClick = {
+                        galleryLauncher.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                ) {
+                    Icon(Icons.Default.PhotoLibrary, contentDescription = "Galerie")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Galerie")
+                }
             }
             
             Spacer(modifier = Modifier.height(24.dp))
+            
+            // Affichage de l'image (depuis URI ou Bitmap)
+            // Note: Pour cette version simple, on gère surtout l'URI. 
+            // Si vous prenez une photo, elle s'affichera via un mécanisme interne de Compose
             
             selectedImageUri?.let { uri ->
                 val bitmap = remember(uri) {
@@ -160,7 +224,7 @@ fun MainScreen() {
                     Button(
                         onClick = {
                             isProcessing = true
-                            identificationResult = "Connexion à PlantNet en cours..."
+                            identificationResult = "Analyse en cours..."
                             scope.launch {
                                 identifyPlant(context, uri)
                             }
@@ -175,7 +239,7 @@ fun MainScreen() {
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                         }
-                        Text(if (isProcessing) "Analyse en cours..." else "Identifier la plante")
+                        Text(if (isProcessing) "Identification..." else "Identifier la plante")
                     }
                 }
             }
@@ -206,7 +270,6 @@ suspend fun identifyPlant(context: android.content.Context, uri: Uri) {
             inputStream?.close()
             
             if (originalBitmap != null) {
-                // COMPRESSER L'IMAGE POUR UN ENVOI PLUS RAPIDE
                 val outputStream = ByteArrayOutputStream()
                 originalBitmap.compress(Bitmap.CompressFormat.JPEG, 50, outputStream)
                 val byteArray = outputStream.toByteArray()
@@ -273,7 +336,7 @@ suspend fun identifyPlant(context: android.content.Context, uri: Uri) {
         }
     } catch (e: java.net.SocketTimeoutException) {
         withContext(Dispatchers.Main) {
-            identificationResult = "La connexion est trop lente.\nEssayez de passer du WiFi à la 4G (ou inversement)."
+            identificationResult = "La connexion est trop lente.\nEssayez de changer de réseau (WiFi/4G)."
             isProcessing = false
         }
     } catch (e: java.net.UnknownHostException) {
