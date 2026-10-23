@@ -32,6 +32,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.InputStream
+import java.util.concurrent.TimeUnit
 
 const val PLANTNET_API_KEY = "2b101jvJGNIYa6n1Vp1TmrV5u"
 
@@ -100,7 +101,6 @@ fun MainScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     
-    // Méthode moderne et fiable pour choisir une image dans Compose
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -115,7 +115,7 @@ fun MainScreen() {
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("🌿", fontSize = 64.sp)
+            Text("", fontSize = 64.sp)
             Spacer(modifier = Modifier.height(16.dp))
             Text("FloraXDZ", fontWeight = FontWeight.Bold, fontSize = 36.sp, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
@@ -204,9 +204,13 @@ suspend fun identifyPlant(context: android.content.Context, uri: Uri) {
             inputStream?.close()
             
             if (byteArray != null) {
-                val client = OkHttpClient()
+                // Client HTTP avec timeout augmenté à 30 secondes
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(30, TimeUnit.SECONDS)
+                    .writeTimeout(30, TimeUnit.SECONDS)
+                    .build()
                 
-                // SYNTAXE CORRECTE ET MODERNE POUR OKHTTP 4.X
                 val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
                 
                 val multipartBody = MultipartBody.Builder()
@@ -255,15 +259,25 @@ suspend fun identifyPlant(context: android.content.Context, uri: Uri) {
                     }
                 } else {
                     withContext(Dispatchers.Main) {
-                        identificationResult = "Erreur lors de l'identification. Vérifiez votre connexion internet."
+                        identificationResult = "Erreur du serveur PlantNet. Code: ${response.code}\nVérifiez votre connexion internet et réessayez."
                         isProcessing = false
                     }
                 }
             }
         }
+    } catch (e: java.net.SocketTimeoutException) {
+        withContext(Dispatchers.Main) {
+            identificationResult = "Timeout: La connexion a pris trop de temps.\nVérifiez votre connexion internet et réessayez."
+            isProcessing = false
+        }
+    } catch (e: java.net.UnknownHostException) {
+        withContext(Dispatchers.Main) {
+            identificationResult = "Impossible de contacter PlantNet.\nVérifiez que vous avez une connexion internet active (WiFi ou données mobiles)."
+            isProcessing = false
+        }
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
-            identificationResult = "Erreur: ${e.message}"
+            identificationResult = "Erreur: ${e.message}\nVérifiez votre connexion internet."
             isProcessing = false
         }
     }
