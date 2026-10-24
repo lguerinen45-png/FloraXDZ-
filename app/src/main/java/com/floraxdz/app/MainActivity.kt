@@ -82,13 +82,6 @@ data class PlantLocation(
     val confidence: Int
 )
 
-data class IdentificationResult(
-    val commonName: String,
-    val scientificName: String,
-    val confidence: Int,
-    val source: String
-)
-
 val algerianPlants = listOf(
     PlantInfo("Pistacia atlantica", "Pistachier de l'Atlas", "بطم أطلسي", "Anacardiaceae", "Arbre rustique pouvant atteindre 7m de hauteur. Feuilles composées, coriaces. Fruits rouges devenant noirs à maturité.", "Résine utilisée contre les troubles digestifs. Feuilles en infusion pour les problèmes respiratoires. Fruits comestibles riches en antioxydants.", "Fixation des sols en zones arides. Refuge pour la faune sauvage. Lutte contre la désertification.", "Atlas tellien, Hauts plateaux, Aures"),
     PlantInfo("Pistacia terebinthus", "Pistachier térébinthe", "بطم terpentين", "Anacardiaceae", "Arbuste ou petit arbre de 3-5m. Feuilles imparipennées. Odeur résineuse caractéristique.", "Térébenthine utilisée en aromathérapie. Écorce astringente. Huile essentielle antiseptique.", "Maquis méditerranéen. Nourriture pour les oiseaux. Protection des sols.", "Régions côtières, Tell algérien"),
@@ -120,7 +113,6 @@ var isProcessing by mutableStateOf(false)
 var selectedOrgan by mutableStateOf("auto")
 var currentScreen by mutableStateOf("main")
 var selectedPlant by mutableStateOf<PlantInfo?>(null)
-var gpsStatusMessage by mutableStateOf("")
 
 @SuppressLint("MissingPermission")
 suspend fun getCurrentLocation(context: Context): Pair<Double, Double>? {
@@ -291,7 +283,7 @@ fun MainContent(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("Identifiez les plantes en Algérie", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("🤖 Double IA : PlantNet + iNaturalist", fontSize = 12.sp, color = NaamaGreen, fontWeight = FontWeight.Medium)
+            Text("🤖 IA : PlantNet", fontSize = 12.sp, color = NaamaGreen, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 TextButton(onClick = { currentScreen = "catalogue" }) { Text("📚 Catalogue") }
@@ -351,7 +343,7 @@ fun MainContent(
                 Button(onClick = {
                     isProcessing = true
                     identificationResult = "Analyse en cours..."
-                    scope.launch { identifyPlantDualAI(context, bitmap, selectedOrgan) }
+                    scope.launch { identifyPlant(context, bitmap, selectedOrgan) }
                 }, modifier = Modifier.fillMaxWidth(), enabled = !isProcessing) {
                     if (isProcessing) { CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White); Spacer(modifier = Modifier.width(8.dp)) }
                     Text(if (isProcessing) "Identification..." else "Identifier la plante")
@@ -361,9 +353,9 @@ fun MainContent(
             identificationResult?.let { result ->
                 Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Résultat :", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("Résultat de l'identification :", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(result, fontSize = 16.sp)
+                        Text(result, fontSize = 16.sp, lineHeight = 20.sp)
                     }
                 }
             }
@@ -547,66 +539,78 @@ fun MapScreen(context: Context) {
     }
 }
 
-suspend fun identifyPlantDualAI(context: Context, bitmap: Bitmap, organ: String) {
+suspend fun identifyPlant(context: Context, bitmap: Bitmap, organ: String) {
     try {
         withContext(Dispatchers.IO) {
             val outputStream = ByteArrayOutputStream()
             bitmap.compress(Bitmap.CompressFormat.JPEG, 50, outputStream)
             val byteArray = outputStream.toByteArray()
+            
+            val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
+            val multipartBody = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("images", "plant.jpg", requestBody)
+                .build()
+            
+            var requestUrl = "https://my-api.plantnet.org/v2/identify/all?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr"
+            if (organ != "auto") {
+                requestUrl += "&organs=$organ"
+            }
+            
             val client = OkHttpClient.Builder()
                 .connectTimeout(45, TimeUnit.SECONDS)
                 .readTimeout(45, TimeUnit.SECONDS)
                 .writeTimeout(45, TimeUnit.SECONDS)
                 .build()
             
-            val plantNetResult = callPlantNetAPI(client, byteArray, organ)
-            val iNaturalistResult = callINaturalistAPI(client, byteArray)
+            val request = Request.Builder().url(requestUrl).post(multipartBody).build()
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
             
-            val combinedResults = mutableListOf<IdentificationResult>()
-            plantNetResult?.let { combinedResults.addAll(it) }
-            iNaturalistResult?.let { combinedResults.addAll(it) }
-            
-            val matchedResults = combinedResults.groupBy { it.scientificName.lowercase() }
-                .filter { it.value.size > 1 }
-            
-            var resultText = ""
-            if (matchedResults.isNotEmpty()) {
-                resultText += "✅ CONFIRMÉ PAR LES DEUX IA :\n\n"
-                matchedResults.forEach { (scientific, results) ->
-                    val bestResult = results.maxByOrNull { it.confidence }!!
-                    resultText += "🌟 ${bestResult.commonName}\n"
-                    resultText += "   Nom scientifique: $scientific\n"
-                    resultText += "   Confiance combinée: ${bestResult.confidence}%\n\n"
+            if (response.isSuccessful && responseBody != null) {
+                val json = JSONObject(responseBody)
+                val resultsArray = json.getJSONArray("results")
+                var resultText = ""
+                var bestName = ""
+                var bestScientific = ""
+                var bestConfidence = 0
+                
+                val limit = min(resultsArray.length(), 3)
+                for (i in 0 until limit) {
+                    val resultObj = resultsArray.getJSONObject(i)
+                    val species = resultObj.getJSONObject("species")
+                    val scientificName = species.getString("scientificNameWithoutAuthor")
+                    val commonNames = species.optJSONArray("commonNames")
+                    val commonName = if (commonNames != null && commonNames.length() > 0) commonNames.getString(0) else "Nom commun non disponible"
+                    val score = resultObj.getDouble("score")
+                    val confidence = (score * 100).toInt()
+                    
+                    if (i == 0) {
+                        bestName = commonName
+                        bestScientific = scientificName
+                        bestConfidence = confidence
+                    }
+                    
+                    // Mise en forme améliorée avec le nom scientifique bien visible
+                    resultText += "🌟 ${i + 1}. $commonName\n"
+                    resultText += "   📜 Nom scientifique : $scientificName\n"
+                    resultText += "   📊 Confiance : $confidence%\n\n"
+                }
+                
+                if (bestName.isNotEmpty() && bestName != "Nom commun non disponible") {
+                    val location = getCurrentLocation(context)
+                    saveToHistory(context, bestName, bestScientific, bestConfidence, location?.first, location?.second)
+                }
+                
+                withContext(Dispatchers.Main) {
+                    identificationResult = if (resultText.isNotEmpty()) resultText.trimEnd() else "Aucun résultat trouvé."
+                    isProcessing = false
                 }
             } else {
-                resultText += "📊 RÉSULTATS DES DEUX IA :\n\n"
-                resultText += "🔵 PlantNet :\n"
-                if (plantNetResult != null && plantNetResult.isNotEmpty()) {
-                    plantNetResult.take(2).forEach { result ->
-                        resultText += "   • ${result.commonName} (${result.confidence}%)\n"
-                    }
-                } else {
-                    resultText += "   Pas de résultat\n"
+                withContext(Dispatchers.Main) {
+                    identificationResult = "Erreur du serveur PlantNet. Code: ${response.code}"
+                    isProcessing = false
                 }
-                resultText += "\n🟢 iNaturalist :\n"
-                if (iNaturalistResult != null && iNaturalistResult.isNotEmpty()) {
-                    iNaturalistResult.take(2).forEach { result ->
-                        resultText += "   • ${result.commonName} (${result.confidence}%)\n"
-                    }
-                } else {
-                    resultText += "   Pas de résultat\n"
-                }
-            }
-            
-            val bestOverall = combinedResults.maxByOrNull { it.confidence }
-            if (bestOverall != null) {
-                val location = getCurrentLocation(context)
-                saveToHistory(context, bestOverall.commonName, bestOverall.scientificName, bestOverall.confidence, location?.first, location?.second)
-            }
-            
-            withContext(Dispatchers.Main) {
-                identificationResult = if (resultText.isNotEmpty()) resultText.trimEnd() else "Aucun résultat trouvé."
-                isProcessing = false
             }
         }
     } catch (e: Exception) {
@@ -614,76 +618,6 @@ suspend fun identifyPlantDualAI(context: Context, bitmap: Bitmap, organ: String)
             identificationResult = "Erreur: ${e.message}"
             isProcessing = false
         }
-    }
-}
-
-suspend fun callPlantNetAPI(client: OkHttpClient, byteArray: ByteArray, organ: String): List<IdentificationResult>? {
-    return try {
-        val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
-        val multipartBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("images", "plant.jpg", requestBody)
-            .build()
-        var requestUrl = "https://my-api.plantnet.org/v2/identify/all?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr"
-        if (organ != "auto") {
-            requestUrl += "&organs=$organ"
-        }
-        val request = Request.Builder().url(requestUrl).post(multipartBody).build()
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string()
-        if (response.isSuccessful && responseBody != null) {
-            val json = JSONObject(responseBody)
-            val resultsArray = json.getJSONArray("results")
-            val identificationResults = mutableListOf<IdentificationResult>()
-            val limit = min(resultsArray.length(), 3)
-            for (i in 0 until limit) {
-                val resultObj = resultsArray.getJSONObject(i)
-                val species = resultObj.getJSONObject("species")
-                val scientificName = species.getString("scientificNameWithoutAuthor")
-                val commonNames = species.optJSONArray("commonNames")
-                val commonName = if (commonNames != null && commonNames.length() > 0) commonNames.getString(0) else "Nom commun non disponible"
-                val score = resultObj.getDouble("score")
-                val confidence = (score * 100).toInt()
-                identificationResults.add(IdentificationResult(commonName, scientificName, confidence, "PlantNet"))
-            }
-            identificationResults
-        } else null
-    } catch (e: Exception) { 
-        null 
-    }
-}
-
-suspend fun callINaturalistAPI(client: OkHttpClient, byteArray: ByteArray): List<IdentificationResult>? {
-    return try {
-        val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
-        val multipartBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("image", "plant.jpg", requestBody)
-            .build()
-        val request = Request.Builder()
-            .url("https://api.inaturalist.org/v1/computervision/score_image")
-            .post(multipartBody)
-            .build()
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string()
-        if (response.isSuccessful && responseBody != null) {
-            val json = JSONObject(responseBody)
-            val resultsArray = json.optJSONArray("results") ?: return null
-            val identificationResults = mutableListOf<IdentificationResult>()
-            val limit = min(resultsArray.length(), 3)
-            for (i in 0 until limit) {
-                val resultObj = resultsArray.getJSONObject(i)
-                val taxon = resultObj.getJSONObject("taxon")
-                val scientificName = taxon.getString("name")
-                val commonName = taxon.optString("preferred_common_name", "Nom commun non disponible")
-                val score = resultObj.getDouble("score")
-                val confidence = (score * 100).toInt()
-                identificationResults.add(IdentificationResult(commonName, scientificName, confidence, "iNaturalist"))
-            }
-            identificationResults
-        } else null
-    } catch (e: Exception) { 
-        null 
     }
 }
 
