@@ -11,6 +11,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
+import android.util.Base64
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -285,7 +286,7 @@ fun MainScreen() {
         if (hasCameraPermission) cameraLauncher.launch(null)
     }
 
-    val organs = listOf("auto" to " Auto", "leaf" to "🍃 Feuille", "flower" to "🌸 Fleur", "fruit" to "🍎 Fruit", "bark" to " Écorce", "stem" to " Tige")
+    val organs = listOf("auto" to " Auto", "leaf" to "🍃 Feuille", "flower" to "🌸 Fleur", "fruit" to "🍎 Fruit", "bark" to "🌳 Écorce", "stem" to "🌱 Tige")
 
     when (currentScreen) {
         "main" -> MainContent(context, scope, hasCameraPermission, hasLocationPermission, cameraLauncher, galleryLauncher, permissionLauncher, organs)
@@ -318,8 +319,8 @@ fun MainContent(
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 TextButton(onClick = { currentScreen = "catalogue" }) { Text("📚 Catalogue") }
-                TextButton(onClick = { currentScreen = "history" }) { Text("📜 Historique") }
-                TextButton(onClick = { currentScreen = "map" }) { Text("🗺️ Carte") }
+                TextButton(onClick = { currentScreen = "history" }) { Text(" Historique") }
+                TextButton(onClick = { currentScreen = "map" }) { Text("️ Carte") }
             }
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -590,20 +591,31 @@ fun MapScreen(context: Context) {
             Text("${locations.size} découverte(s) géolocalisée(s)", fontSize = 14.sp, color = Color.Gray)
             Spacer(modifier = Modifier.height(16.dp))
             
+            // Carte avec WebView - VERSION CORRIGÉE
             val mapHtml = generateMapHtml(locations)
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
                         webViewClient = WebViewClient()
                         settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true // ⭐ LA LIGNE MAGIQUE QUI FAIT FONCTIONNER LA CARTE
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = true
+                        settings.allowContentAccess = true
                         settings.setSupportZoom(true)
                         settings.builtInZoomControls = true
                         settings.displayZoomControls = false
-                        loadDataWithBaseURL(null, mapHtml, "text/html", "UTF-8", null)
+                        settings.useWideViewPort = true
+                        settings.loadWithOverviewMode = true
+                        // Utiliser loadData avec encodage base64 pour éviter les blocages CORS
+                        val encodedHtml = Base64.encodeToString(mapHtml.toByteArray(Charsets.UTF_8), Base64.NO_PADDING)
+                        loadData(encodedHtml, "text/html; charset=utf-8", "base64")
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(400.dp).clip(RoundedCornerShape(12.dp))
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(500.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(2.dp, NaamaGreen, RoundedCornerShape(12.dp))
             )
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -629,33 +641,52 @@ fun generateMapHtml(locations: List<PlantLocation>): String {
         "L.marker([${loc.latitude}, ${loc.longitude}]).addTo(map).bindPopup('<b>${loc.name}</b><br><i>${loc.scientificName}</i><br>${loc.date}');"
     }.joinToString("\n")
     
-    val centerLat = if (locations.isNotEmpty()) locations.first().latitude else 28.0
-    val centerLng = if (locations.isNotEmpty()) locations.first().longitude else 3.0
+    val centerLat = if (locations.isNotEmpty()) locations.map { it.latitude }.average() else 28.0
+    val centerLng = if (locations.isNotEmpty()) locations.map { it.longitude }.average() else 3.0
     
+    // HTML complet avec Leaflet CSS et JS intégrés depuis CDN
     return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-            <style>
-                body { margin: 0; padding: 0; }
-                #map { width: 100%; height: 100vh; }
-            </style>
-        </head>
-        <body>
-            <div id="map"></div>
-            <script>
-                var map = L.map('map').setView([$centerLat, $centerLng], 6);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap'
-                }).addTo(map);
-                $markers
-            </script>
-        </body>
-        </html>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; }
+        #map { width: 100%; height: 100%; }
+        .leaflet-popup-content-wrapper { border-radius: 8px; }
+        .leaflet-popup-content { margin: 12px; font-family: sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // Initialisation de la carte
+        var map = L.map('map', {
+            center: [$centerLat, $centerLng],
+            zoom: 6,
+            zoomControl: true
+        });
+        
+        // Ajout des tuiles OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+        
+        // Ajout des marqueurs
+        $markers
+        
+        // Forcer le recalcul de la taille après chargement
+        setTimeout(function() {
+            map.invalidateSize();
+        }, 100);
+    </script>
+</body>
+</html>
     """.trimIndent()
 }
 
