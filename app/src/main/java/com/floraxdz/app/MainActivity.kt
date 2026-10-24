@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
@@ -90,7 +93,7 @@ fun getHistory(context: Context): List<JSONObject> {
     for (i in 0 until jsonArray.length()) {
         list.add(jsonArray.getJSONObject(i))
     }
-    return list.reversed() // Le plus récent en premier
+    return list.reversed()
 }
 
 @Composable
@@ -189,7 +192,7 @@ fun MainScreen() {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("FloraXDZ", fontWeight = FontWeight.Bold, fontSize = 28.sp, color = MaterialTheme.colorScheme.primary)
                 TextButton(onClick = { 
-                    historyList = getHistory(context) // Rafraîchir avant d'ouvrir
+                    historyList = getHistory(context)
                     showHistory = true 
                 }) {
                     Text("📜 Historique")
@@ -247,14 +250,22 @@ fun MainScreen() {
             }
 
             imageToShow?.let { bitmap ->
-                androidx.compose.foundation.Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Plante", modifier = Modifier.fillMaxWidth().height(300.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Plante",
+                    modifier = Modifier.fillMaxWidth().height(300.dp),
+                    contentScale = ContentScale.Crop
+                )
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(onClick = {
                     isProcessing = true
                     identificationResult = "Analyse en cours..."
                     scope.launch { identifyPlantFromBitmap(context, bitmap, selectedOrgan) }
                 }, modifier = Modifier.fillMaxWidth(), enabled = !isProcessing) {
-                    if (isProcessing) { CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White); Spacer(modifier = Modifier.width(8.dp)) }
+                    if (isProcessing) { 
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp)) 
+                    }
                     Text(if (isProcessing) "Identification..." else "Identifier la plante")
                 }
             }
@@ -317,7 +328,6 @@ suspend fun identifyPlantFromBitmap(context: Context, bitmap: Bitmap, organ: Str
                     resultText += "${i + 1}. $commonName\n   Nom scientifique: $scientificName\n   Confiance: $confidence%\n\n"
                 }
                 
-                // Sauvegarder le meilleur résultat dans l'historique
                 if (bestName.isNotEmpty() && bestName != "Nom commun non disponible") {
                     saveToHistory(context, bestName, bestScientific, bestConfidence)
                 }
