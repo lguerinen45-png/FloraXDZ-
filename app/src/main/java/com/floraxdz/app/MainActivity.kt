@@ -119,7 +119,6 @@ var gpsStatusMessage by mutableStateOf("")
 suspend fun getCurrentLocation(context: Context): Pair<Double, Double>? {
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     
-    // Vérifier si le GPS est activé
     val isGPSEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
     val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
     
@@ -134,7 +133,7 @@ suspend fun getCurrentLocation(context: Context): Pair<Double, Double>? {
         var locationListener: LocationListener? = null
         
         val timeoutJob = kotlinx.coroutines.GlobalScope.launch {
-            kotlinx.coroutines.delay(10000) // 10 secondes max
+            kotlinx.coroutines.delay(10000)
             if (continuation.isActive) {
                 locationListener?.let { locationManager.removeUpdates(it) }
                 continuation.resume(null)
@@ -155,7 +154,6 @@ suspend fun getCurrentLocation(context: Context): Pair<Double, Double>? {
         }
         
         try {
-            // Essayer d'abord le GPS
             if (isGPSEnabled) {
                 locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0f, locationListener!!)
             } else if (isNetworkEnabled) {
@@ -209,12 +207,11 @@ fun getLocations(context: Context): List<PlantLocation> {
     }.filter { it.latitude != 0.0 && it.longitude != 0.0 }
 }
 
-// Fonction pour ajouter des données de test (pour démonstration)
 fun addSampleLocations(context: Context) {
     val samplePlants = listOf(
-        Triple("Pistacia atlantica", 33.2735, 0.3087), // Naâma
-        Triple("Olea europaea", 36.7538, 3.0588), // Alger
-        Triple("Phoenix dactylifera", 34.8481, 5.7281) // Biskra
+        Triple("Pistacia atlantica", 33.2735, 0.3087),
+        Triple("Olea europaea", 36.7538, 3.0588),
+        Triple("Phoenix dactylifera", 34.8481, 5.7281)
     )
     
     samplePlants.forEach { (scientific, lat, lng) ->
@@ -256,7 +253,7 @@ fun SplashScreen() {
             Text("Conçu par", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
             Text("Pr. GUERINE Lakhdar", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Yellow, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Algérie 🇿 • 2026", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+            Text("Algérie 🇩🇿 • 2026", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
         }
     }
 }
@@ -288,7 +285,7 @@ fun MainScreen() {
         if (hasCameraPermission) cameraLauncher.launch(null)
     }
 
-    val organs = listOf("auto" to " Auto", "leaf" to "🍃 Feuille", "flower" to "🌸 Fleur", "fruit" to "🍎 Fruit", "bark" to "🌳 Écorce", "stem" to "🌱 Tige")
+    val organs = listOf("auto" to " Auto", "leaf" to "🍃 Feuille", "flower" to "🌸 Fleur", "fruit" to "🍎 Fruit", "bark" to " Écorce", "stem" to " Tige")
 
     when (currentScreen) {
         "main" -> MainContent(context, scope, hasCameraPermission, hasLocationPermission, cameraLauncher, galleryLauncher, permissionLauncher, organs)
@@ -320,7 +317,7 @@ fun MainContent(
             Spacer(modifier = Modifier.height(16.dp))
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                TextButton(onClick = { currentScreen = "catalogue" }) { Text(" Catalogue") }
+                TextButton(onClick = { currentScreen = "catalogue" }) { Text("📚 Catalogue") }
                 TextButton(onClick = { currentScreen = "history" }) { Text("📜 Historique") }
                 TextButton(onClick = { currentScreen = "map" }) { Text("🗺️ Carte") }
             }
@@ -351,7 +348,7 @@ fun MainContent(
             Spacer(modifier = Modifier.height(16.dp))
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4))) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text(" Conseils :", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("📸 Conseils :", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text("• Photo nette et bien éclairée", fontSize = 12.sp)
                     Text("• Un seul organe à la fois", fontSize = 12.sp)
                     Text("• Plante = 70% de la photo", fontSize = 12.sp)
@@ -508,7 +505,7 @@ fun PlantDetailScreen() {
         
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(" Usages médicinaux", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("💊 Usages médicinaux", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(plant.medicinalUses, fontSize = 14.sp)
             }
@@ -518,7 +515,7 @@ fun PlantDetailScreen() {
         
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(" Usages écologiques", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("🌍 Usages écologiques", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(plant.ecologicalUses, fontSize = 14.sp)
             }
@@ -599,6 +596,10 @@ fun MapScreen(context: Context) {
                     WebView(ctx).apply {
                         webViewClient = WebViewClient()
                         settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true // ⭐ LA LIGNE MAGIQUE QUI FAIT FONCTIONNER LA CARTE
+                        settings.setSupportZoom(true)
+                        settings.builtInZoomControls = true
+                        settings.displayZoomControls = false
                         loadDataWithBaseURL(null, mapHtml, "text/html", "UTF-8", null)
                     }
                 },
@@ -706,7 +707,6 @@ suspend fun identifyPlantFromBitmap(context: Context, bitmap: Bitmap, organ: Str
                     resultText += "${i + 1}. $commonName\n   Nom scientifique: $scientificName\n   Confiance: $confidence%\n\n"
                 }
                 
-                // Récupérer la position GPS (attend jusqu'à 10 secondes)
                 val location = getCurrentLocation(context)
                 
                 if (bestName.isNotEmpty() && bestName != "Nom commun non disponible") {
