@@ -1,12 +1,17 @@
 package com.floraxdz.app
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.location.Location
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -35,6 +40,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,6 +68,15 @@ data class PlantInfo(
     val medicinalUses: String,
     val ecologicalUses: String,
     val distribution: String
+)
+
+data class PlantLocation(
+    val name: String,
+    val scientificName: String,
+    val latitude: Double,
+    val longitude: Double,
+    val date: String,
+    val confidence: Int
 )
 
 val algerianPlants = listOf(
@@ -96,7 +111,25 @@ var selectedOrgan by mutableStateOf("auto")
 var currentScreen by mutableStateOf("main")
 var selectedPlant by mutableStateOf<PlantInfo?>(null)
 
-fun saveToHistory(context: Context, plantName: String, scientificName: String, confidence: Int) {
+fun getCurrentLocation(context: Context): Pair<Double, Double>? {
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        return null
+    }
+    return try {
+        val location: Location? = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        if (location != null) {
+            Pair(location.latitude, location.longitude)
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
+
+fun saveToHistory(context: Context, plantName: String, scientificName: String, confidence: Int, latitude: Double? = null, longitude: Double? = null) {
     val prefs = context.getSharedPreferences("FloraXDZ_History", Context.MODE_PRIVATE)
     val historyJson = prefs.getString("history", "[]") ?: "[]"
     val jsonArray = JSONArray(historyJson)
@@ -106,6 +139,8 @@ fun saveToHistory(context: Context, plantName: String, scientificName: String, c
         put("scientific", scientificName)
         put("confidence", confidence)
         put("date", SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date()))
+        put("latitude", latitude ?: 0.0)
+        put("longitude", longitude ?: 0.0)
     }
     jsonArray.put(newItem)
     prefs.edit().putString("history", jsonArray.toString()).apply()
@@ -122,11 +157,25 @@ fun getHistory(context: Context): List<JSONObject> {
     return list.reversed()
 }
 
+fun getLocations(context: Context): List<PlantLocation> {
+    val history = getHistory(context)
+    return history.map { item ->
+        PlantLocation(
+            name = item.getString("name"),
+            scientificName = item.getString("scientific"),
+            latitude = item.optDouble("latitude", 0.0),
+            longitude = item.optDouble("longitude", 0.0),
+            date = item.getString("date"),
+            confidence = item.getInt("confidence")
+        )
+    }.filter { it.latitude != 0.0 && it.longitude != 0.0 }
+}
+
 @Composable
 fun FloraXDZApp() {
     var showSplash by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(2000)
+        kotlinx.coroutines.delay(3000)
         showSplash = false
     }
     if (showSplash) SplashScreen() else MainScreen()
@@ -139,15 +188,21 @@ fun SplashScreen() {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Text("", fontSize = 100.sp)
+            Text("🌿", fontSize = 100.sp)
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Université de Naâma", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(modifier = Modifier.width(60.dp).height(4.dp).background(NaamaRed))
+            Text("FloraXDZ", fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Application d'identification", fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
+            Text("des plantes d'Algérie", fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Pr. GUERINE Lakhdar", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Algérie 🇩🇿", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
+            Box(modifier = Modifier.width(80.dp).height(4.dp).background(NaamaRed))
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Université de Naâma", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, textAlign = TextAlign.Center)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Conçu par", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+            Text("Pr. GUERINE Lakhdar", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Yellow, textAlign = TextAlign.Center)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Algérie 🇩🇿 • 2026", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
         }
     }
 }
@@ -161,6 +216,10 @@ fun MainScreen() {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
 
+    var hasLocationPermission by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+    }
+
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
         if (bitmap != null) { selectedBitmap = bitmap; selectedImageUri = null }
     }
@@ -169,18 +228,20 @@ fun MainScreen() {
         if (uri != null) { selectedImageUri = uri; selectedBitmap = null }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        hasCameraPermission = isGranted
-        if (isGranted) cameraLauncher.launch(null)
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        hasCameraPermission = permissions[Manifest.permission.CAMERA] ?: false
+        hasLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        if (hasCameraPermission) cameraLauncher.launch(null)
     }
 
-    val organs = listOf("auto" to " Auto", "leaf" to "🍃 Feuille", "flower" to " Fleur", "fruit" to "🍎 Fruit", "bark" to "🌳 Écorce", "stem" to "🌱 Tige")
+    val organs = listOf("auto" to " Auto", "leaf" to "🍃 Feuille", "flower" to "🌸 Fleur", "fruit" to "🍎 Fruit", "bark" to "🌳 Écorce", "stem" to "🌱 Tige")
 
     when (currentScreen) {
-        "main" -> MainContent(context, scope, hasCameraPermission, cameraLauncher, galleryLauncher, permissionLauncher, organs)
+        "main" -> MainContent(context, scope, hasCameraPermission, hasLocationPermission, cameraLauncher, galleryLauncher, permissionLauncher, organs)
         "history" -> HistoryScreen(context)
         "catalogue" -> CatalogueScreen()
         "plantDetail" -> PlantDetailScreen()
+        "map" -> MapScreen(context)
     }
 }
 
@@ -189,23 +250,27 @@ fun MainContent(
     context: Context,
     scope: kotlinx.coroutines.CoroutineScope,
     hasCameraPermission: Boolean,
+    hasLocationPermission: Boolean,
     cameraLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Void?, Bitmap?>,
     galleryLauncher: androidx.activity.compose.ManagedActivityResultLauncher<PickVisualMediaRequest, Uri?>,
-    permissionLauncher: androidx.activity.compose.ManagedActivityResultLauncher<String, Boolean>,
+    permissionLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>,
     organs: List<Pair<String, String>>
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("FloraXDZ", fontWeight = FontWeight.Bold, fontSize = 28.sp, color = MaterialTheme.colorScheme.primary)
-                Row {
-                    TextButton(onClick = { currentScreen = "catalogue" }) { Text("📚 Catalogue") }
-                    TextButton(onClick = { currentScreen = "history" }) { Text("📜 Historique") }
-                }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("Identifiez les plantes en Algérie", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                TextButton(onClick = { currentScreen = "catalogue" }) { Text("📚 Catalogue") }
+                TextButton(onClick = { currentScreen = "history" }) { Text("📜 Historique") }
+                TextButton(onClick = { currentScreen = "map" }) { Text("🗺️ Carte") }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text("Quel organe photographiez-vous ?", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(modifier = Modifier.height(12.dp))
@@ -241,7 +306,11 @@ fun MainContent(
             Spacer(modifier = Modifier.height(24.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Button(onClick = { if (hasCameraPermission) cameraLauncher.launch(null) else permissionLauncher.launch(Manifest.permission.CAMERA) }, modifier = Modifier.weight(1f)) {
+                Button(onClick = {
+                    val permissions = mutableListOf(Manifest.permission.CAMERA)
+                    if (!hasLocationPermission) permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    permissionLauncher.launch(permissions.toTypedArray())
+                }, modifier = Modifier.weight(1f)) {
                     Text("📷", fontSize = 24.sp); Spacer(modifier = Modifier.width(8.dp)); Text("Caméra")
                 }
                 Button(onClick = { galleryLauncher.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)) {
@@ -277,6 +346,9 @@ fun MainContent(
                     }
                 }
             }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Pr. GUERINE Lakhdar • 2026", fontSize = 10.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -308,6 +380,11 @@ fun HistoryScreen(context: Context) {
                             Text(item.getString("scientific"), fontStyle = FontStyle.Italic, fontSize = 12.sp, color = Color.DarkGray)
                             Text("Confiance: ${item.getInt("confidence")}%", fontSize = 12.sp)
                             Text(item.getString("date"), fontSize = 10.sp, color = Color.Gray)
+                            val lat = item.optDouble("latitude", 0.0)
+                            val lng = item.optDouble("longitude", 0.0)
+                            if (lat != 0.0 && lng != 0.0) {
+                                Text(" Position: $lat, $lng", fontSize = 10.sp, color = NaamaGreen)
+                            }
                         }
                     }
                 }
@@ -403,6 +480,96 @@ fun PlantDetailScreen() {
     }
 }
 
+@Composable
+fun MapScreen(context: Context) {
+    val locations = getLocations(context)
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Carte des découvertes", fontWeight = FontWeight.Bold, fontSize = 24.sp)
+            TextButton(onClick = { currentScreen = "main" }) { Text("← Retour") }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        if (locations.isEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4))) {
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("🗺️", fontSize = 48.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Aucune plante géolocalisée", fontWeight = FontWeight.Bold, fontSize = 16.sp, textAlign = TextAlign.Center)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Identifiez des plantes avec une connexion internet pour les voir apparaître sur la carte.", fontSize = 14.sp, textAlign = TextAlign.Center)
+                }
+            }
+        } else {
+            Text("${locations.size} découverte(s) géolocalisée(s)", fontSize = 14.sp, color = Color.Gray)
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Carte avec OpenStreetMap via WebView
+            val mapHtml = generateMapHtml(locations)
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        webViewClient = WebViewClient()
+                        settings.javaScriptEnabled = true
+                        loadDataWithBaseURL(null, mapHtml, "text/html", "UTF-8", null)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(400.dp).clip(RoundedCornerShape(12.dp))
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                locations.forEach { loc ->
+                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(loc.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(loc.scientificName, fontStyle = FontStyle.Italic, fontSize = 12.sp, color = Color.DarkGray)
+                            Text(" ${loc.latitude}, ${loc.longitude}", fontSize = 12.sp, color = NaamaGreen)
+                            Text(loc.date, fontSize = 10.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun generateMapHtml(locations: List<PlantLocation>): String {
+    val markers = locations.map { loc ->
+        "L.marker([${loc.latitude}, ${loc.longitude}]).addTo(map).bindPopup('<b>${loc.name}</b><br><i>${loc.scientificName}</i><br>${loc.date}');"
+    }.joinToString("\n")
+    
+    val centerLat = if (locations.isNotEmpty()) locations.first().latitude else 28.0
+    val centerLng = if (locations.isNotEmpty()) locations.first().longitude else 3.0
+    
+    return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+            <style>
+                body { margin: 0; padding: 0; }
+                #map { width: 100%; height: 100vh; }
+            </style>
+        </head>
+        <body>
+            <div id="map"></div>
+            <script>
+                var map = L.map('map').setView([$centerLat, $centerLng], 6);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap'
+                }).addTo(map);
+                $markers
+            </script>
+        </body>
+        </html>
+    """.trimIndent()
+}
+
 suspend fun identifyPlantFromBitmap(context: Context, bitmap: Bitmap, organ: String) {
     try {
         withContext(Dispatchers.IO) {
@@ -414,7 +581,6 @@ suspend fun identifyPlantFromBitmap(context: Context, bitmap: Bitmap, organ: Str
             val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
             val multipartBody = MultipartBody.Builder().setType(MultipartBody.FORM).addFormDataPart("images", "plant.jpg", requestBody).build()
             
-            // CORRECTION ICI : L'URL utilise "all" comme projet, et l'organe est passé en paramètre
             var url = "https://my-api.plantnet.org/v2/identify/all?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr"
             if (organ != "auto") {
                 url += "&organs=$organ"
@@ -452,8 +618,11 @@ suspend fun identifyPlantFromBitmap(context: Context, bitmap: Bitmap, organ: Str
                     resultText += "${i + 1}. $commonName\n   Nom scientifique: $scientificName\n   Confiance: $confidence%\n\n"
                 }
                 
+                // Récupérer la position GPS
+                val location = getCurrentLocation(context)
+                
                 if (bestName.isNotEmpty() && bestName != "Nom commun non disponible") {
-                    saveToHistory(context, bestName, bestScientific, bestConfidence)
+                    saveToHistory(context, bestName, bestScientific, bestConfidence, location?.first, location?.second)
                 }
 
                 withContext(Dispatchers.Main) {
