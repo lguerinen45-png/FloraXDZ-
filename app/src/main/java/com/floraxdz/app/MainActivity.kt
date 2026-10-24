@@ -14,13 +14,17 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -58,7 +62,7 @@ var selectedImageUri by mutableStateOf<Uri?>(null)
 var selectedBitmap by mutableStateOf<Bitmap?>(null)
 var identificationResult by mutableStateOf<String?>(null)
 var isProcessing by mutableStateOf(false)
-var selectedOrgan by mutableStateOf("auto") // auto, leaf, flower, fruit, bark, stem
+var selectedOrgan by mutableStateOf("auto")
 
 @Composable
 fun FloraXDZApp() {
@@ -124,45 +128,59 @@ fun MainScreen() {
         }
     }
 
-    val organs = listOf("auto" to "Automatique", "leaf" to " Feuille", "flower" to "🌸 Fleur", "fruit" to "🍎 Fruit", "bark" to "🌳 Écorce", "stem" to "🌱 Tige")
+    // Liste des organes avec emojis
+    val organs = listOf(
+        "auto" to " Auto",
+        "leaf" to "🍃 Feuille",
+        "flower" to "🌸 Fleur",
+        "fruit" to "🍎 Fruit",
+        "bark" to "🌳 Écorce",
+        "stem" to "🌱 Tige"
+    )
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("🌿", fontSize = 64.sp)
+            Text("", fontSize = 64.sp)
             Spacer(modifier = Modifier.height(16.dp))
             Text("FloraXDZ", fontWeight = FontWeight.Bold, fontSize = 36.sp, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
             Text("Identifiez les plantes en Algérie", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Menu déroulant pour choisir l'organe
-            var expanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = !expanded }
-            ) {
-                TextField(
-                    value = organs.first { it.first == selectedOrgan }.second,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Organe de la plante") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor()
-                )
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    organs.forEach { (value, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = {
-                                selectedOrgan = value
-                                expanded = false
-                            }
-                        )
+            // Titre pour le choix d'organe
+            Text("Quel organe photographiez-vous ?", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Boutons de sélection en grille
+            val rows = organs.chunked(3)
+            rows.forEach { row ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { (value, label) ->
+                        val isSelected = selectedOrgan == value
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) NaamaGreen else Color.LightGray.copy(alpha = 0.3f))
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isSelected) NaamaGreen else Color.Gray,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .clickable { selectedOrgan = value }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 12.sp,
+                                color = if (isSelected) Color.White else Color.Black,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -170,15 +188,13 @@ fun MainScreen() {
             // Conseils photo
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5DC))
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("📸 Conseils pour une meilleure identification :", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("📸 Conseils :", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text("• Photo nette et bien éclairée", fontSize = 12.sp)
-                    Text("• Un seul organe (feuille OU fleur)", fontSize = 12.sp)
-                    Text("• La plante doit remplir 70% de la photo", fontSize = 12.sp)
-                    Text("• Fond neutre si possible", fontSize = 12.sp)
+                    Text("• Un seul organe à la fois", fontSize = 12.sp)
+                    Text("• Plante = 70% de la photo", fontSize = 12.sp)
                 }
             }
 
@@ -255,7 +271,6 @@ suspend fun identifyPlantFromBitmap(bitmap: Bitmap, organ: String) {
             val requestBody = byteArray.toRequestBody("image/jpeg".toMediaType())
             val multipartBody = MultipartBody.Builder().setType(MultipartBody.FORM).addFormDataPart("images", "plant.jpg", requestBody).build()
             
-            // URL avec le paramètre d'organe
             val url = "https://my-api.plantnet.org/v2/identify/$organ?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr"
             val request = Request.Builder().url(url).post(multipartBody).build()
 
