@@ -41,7 +41,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -55,6 +58,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
+import kotlin.math.min
 
 const val PLANTNET_API_KEY = "2b101jvIJGNlYa6n1Vp1TmrV5u"
 
@@ -82,7 +86,7 @@ data class IdentificationResult(
     val commonName: String,
     val scientificName: String,
     val confidence: Int,
-    val source: String // "PlantNet", "iNaturalist", ou "Les deux"
+    val source: String
 )
 
 val algerianPlants = listOf(
@@ -121,28 +125,18 @@ var gpsStatusMessage by mutableStateOf("")
 @SuppressLint("MissingPermission")
 suspend fun getCurrentLocation(context: Context): Pair<Double, Double>? {
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-    
     val isGPSEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
     val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-    
-    if (!isGPSEnabled && !isNetworkEnabled) {
-        withContext(Dispatchers.Main) {
-            gpsStatusMessage = "GPS désactivé. Activez-le dans les paramètres."
-        }
-        return null
-    }
-    
+    if (!isGPSEnabled && !isNetworkEnabled) return null
     return suspendCancellableCoroutine { continuation ->
         var locationListener: LocationListener? = null
-        
-        val timeoutJob = GlobalScope.launch {
-            delay(10000)
+        val timeoutJob = kotlinx.coroutines.GlobalScope.launch {
+            kotlinx.coroutines.delay(10000)
             if (continuation.isActive) {
                 locationListener?.let { locationManager.removeUpdates(it) }
                 continuation.resume(null)
             }
         }
-        
         locationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 if (continuation.isActive) {
@@ -151,17 +145,12 @@ suspend fun getCurrentLocation(context: Context): Pair<Double, Double>? {
                     continuation.resume(Pair(location.latitude, location.longitude))
                 }
             }
-            
             override fun onProviderEnabled(provider: String) {}
             override fun onProviderDisabled(provider: String) {}
         }
-        
         try {
-            if (isGPSEnabled) {
-                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0f, locationListener!!)
-            } else if (isNetworkEnabled) {
-                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0f, locationListener!!)
-            }
+            if (isGPSEnabled) locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0f, locationListener!!)
+            else if (isNetworkEnabled) locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0f, locationListener!!)
         } catch (e: Exception) {
             continuation.resume(null)
         }
@@ -172,7 +161,6 @@ fun saveToHistory(context: Context, plantName: String, scientificName: String, c
     val prefs = context.getSharedPreferences("FloraXDZ_History", Context.MODE_PRIVATE)
     val historyJson = prefs.getString("history", "[]") ?: "[]"
     val jsonArray = JSONArray(historyJson)
-    
     val newItem = JSONObject().apply {
         put("name", plantName)
         put("scientific", scientificName)
@@ -189,16 +177,13 @@ fun getHistory(context: Context): List<JSONObject> {
     val prefs = context.getSharedPreferences("FloraXDZ_History", Context.MODE_PRIVATE)
     val historyJson = prefs.getString("history", "[]") ?: "[]"
     val jsonArray = JSONArray(historyJson)
-    val list = mutableListOf<JSONObject>()
-    for (i in 0 until jsonArray.length()) {
-        list.add(jsonArray.getJSONObject(i))
-    }
-    return list.reversed()
+    val resultList = mutableListOf<JSONObject>()
+    for (i in 0 until jsonArray.length()) resultList.add(jsonArray.getJSONObject(i))
+    return resultList.reversed()
 }
 
 fun getLocations(context: Context): List<PlantLocation> {
-    val history = getHistory(context)
-    return history.map { item ->
+    return getHistory(context).map { item ->
         PlantLocation(
             name = item.getString("name"),
             scientificName = item.getString("scientific"),
@@ -211,17 +196,13 @@ fun getLocations(context: Context): List<PlantLocation> {
 }
 
 fun addSampleLocations(context: Context) {
-    val samplePlants = listOf(
+    listOf(
         Triple("Pistacia atlantica", 33.2735, 0.3087),
         Triple("Olea europaea", 36.7538, 3.0588),
         Triple("Phoenix dactylifera", 34.8481, 5.7281)
-    )
-    
-    samplePlants.forEach { (scientific, lat, lng) ->
+    ).forEach { (scientific, lat, lng) ->
         val plant = algerianPlants.find { it.scientificName == scientific }
-        if (plant != null) {
-            saveToHistory(context, plant.commonName, plant.scientificName, 85, lat, lng)
-        }
+        if (plant != null) saveToHistory(context, plant.commonName, plant.scientificName, 85, lat, lng)
     }
 }
 
@@ -229,20 +210,15 @@ fun openGoogleMaps(context: Context, latitude: Double, longitude: Double, plantN
     val uri = "geo:$latitude,$longitude?q=$latitude,$longitude(${URLEncoder.encode(plantName, "UTF-8")})"
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
     intent.setPackage("com.google.android.apps.maps")
-    if (intent.resolveActivity(context.packageManager) != null) {
-        context.startActivity(intent)
-    } else {
-        // Si Google Maps n'est pas installé, ouvrir dans le navigateur
-        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=$latitude,$longitude"))
-        context.startActivity(webIntent)
-    }
+    if (intent.resolveActivity(context.packageManager) != null) context.startActivity(intent)
+    else context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=$latitude,$longitude")))
 }
 
 @Composable
 fun FloraXDZApp() {
     var showSplash by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
-        delay(3000)
+        kotlinx.coroutines.delay(3000)
         showSplash = false
     }
     if (showSplash) SplashScreen() else MainScreen()
@@ -278,31 +254,16 @@ fun SplashScreen() {
 fun MainScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    var hasCameraPermission by remember {
-        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
-    }
-
-    var hasLocationPermission by remember {
-        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
-    }
-
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
-        if (bitmap != null) { selectedBitmap = bitmap; selectedImageUri = null }
-    }
-
-    val galleryLauncher = rememberLauncherForActivityResult(PickVisualMedia()) { uri: Uri? ->
-        if (uri != null) { selectedImageUri = uri; selectedBitmap = null }
-    }
-
+    var hasCameraPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
+    var hasLocationPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? -> if (bitmap != null) { selectedBitmap = bitmap; selectedImageUri = null } }
+    val galleryLauncher = rememberLauncherForActivityResult(PickVisualMedia()) { uri: Uri? -> if (uri != null) { selectedImageUri = uri; selectedBitmap = null } }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         hasCameraPermission = permissions[Manifest.permission.CAMERA] ?: false
         hasLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         if (hasCameraPermission) cameraLauncher.launch(null)
     }
-
-    val organs = listOf("auto" to " Auto", "leaf" to " Feuille", "flower" to " Fleur", "fruit" to "🍎 Fruit", "bark" to "🌳 Écorce", "stem" to "🌱 Tige")
-
+    val organs = listOf("auto" to " Auto", "leaf" to "🍃 Feuille", "flower" to "🌸 Fleur", "fruit" to "🍎 Fruit", "bark" to "🌳 Écorce", "stem" to "🌱 Tige")
     when (currentScreen) {
         "main" -> MainContent(context, scope, hasCameraPermission, hasLocationPermission, cameraLauncher, galleryLauncher, permissionLauncher, organs)
         "history" -> HistoryScreen(context)
@@ -315,7 +276,7 @@ fun MainScreen() {
 @Composable
 fun MainContent(
     context: Context,
-    scope: CoroutineScope,
+    scope: kotlinx.coroutines.CoroutineScope,
     hasCameraPermission: Boolean,
     hasLocationPermission: Boolean,
     cameraLauncher: androidx.activity.compose.ManagedActivityResultLauncher<Void?, Bitmap?>,
@@ -330,19 +291,16 @@ fun MainContent(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("Identifiez les plantes en Algérie", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(" Double IA : PlantNet + iNaturalist", fontSize = 12.sp, color = NaamaGreen, fontWeight = FontWeight.Medium)
+            Text("🤖 Double IA : PlantNet + iNaturalist", fontSize = 12.sp, color = NaamaGreen, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(16.dp))
-            
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 TextButton(onClick = { currentScreen = "catalogue" }) { Text("📚 Catalogue") }
                 TextButton(onClick = { currentScreen = "history" }) { Text("📜 Historique") }
                 TextButton(onClick = { currentScreen = "map" }) { Text("🗺️ Carte") }
             }
             Spacer(modifier = Modifier.height(16.dp))
-
             Text("Quel organe photographiez-vous ?", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(modifier = Modifier.height(12.dp))
-
             val rows = organs.chunked(3)
             rows.forEach { row ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -361,7 +319,6 @@ fun MainContent(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
-
             Spacer(modifier = Modifier.height(16.dp))
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4))) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -372,7 +329,6 @@ fun MainContent(
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
-
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Button(onClick = {
                     val permissions = mutableListOf(Manifest.permission.CAMERA)
@@ -386,17 +342,15 @@ fun MainContent(
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
-
             val imageToShow = selectedBitmap ?: selectedImageUri?.let { uri ->
                 try { val inputStream: InputStream? = context.contentResolver.openInputStream(uri); BitmapFactory.decodeStream(inputStream) } catch (e: Exception) { null }
             }
-
             imageToShow?.let { bitmap ->
                 Image(bitmap = bitmap.asImageBitmap(), contentDescription = "Plante", modifier = Modifier.fillMaxWidth().height(300.dp), contentScale = ContentScale.Crop)
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(onClick = {
                     isProcessing = true
-                    identificationResult = "Analyse en cours avec PlantNet et iNaturalist..."
+                    identificationResult = "Analyse en cours..."
                     scope.launch { identifyPlantDualAI(context, bitmap, selectedOrgan) }
                 }, modifier = Modifier.fillMaxWidth(), enabled = !isProcessing) {
                     if (isProcessing) { CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White); Spacer(modifier = Modifier.width(8.dp)) }
@@ -404,7 +358,6 @@ fun MainContent(
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
-
             identificationResult?.let { result ->
                 Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -414,7 +367,6 @@ fun MainContent(
                     }
                 }
             }
-            
             Spacer(modifier = Modifier.height(16.dp))
             Text("Pr. GUERINE Lakhdar • 2026", fontSize = 10.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
@@ -445,10 +397,7 @@ fun HistoryScreen(context: Context) {
                             val lng = item.optDouble("longitude", 0.0)
                             if (lat != 0.0 && lng != 0.0) {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Button(
-                                    onClick = { openGoogleMaps(context, lat, lng, item.getString("name")) },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
+                                Button(onClick = { openGoogleMaps(context, lat, lng, item.getString("name")) }, modifier = Modifier.fillMaxWidth()) {
                                     Text("📍 Voir sur Google Maps")
                                 }
                             } else {
@@ -496,7 +445,6 @@ fun PlantDetailScreen() {
             TextButton(onClick = { currentScreen = "catalogue" }) { Text("← Retour") }
         }
         Spacer(modifier = Modifier.height(16.dp))
-        
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(plant.commonName, fontWeight = FontWeight.Bold, fontSize = 22.sp)
@@ -506,19 +454,15 @@ fun PlantDetailScreen() {
                 Text("Famille: ${plant.family}", fontSize = 14.sp)
             }
         }
-        
         Spacer(modifier = Modifier.height(16.dp))
-        
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(" Description", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("📖 Description", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(plant.description, fontSize = 14.sp)
             }
         }
-        
         Spacer(modifier = Modifier.height(16.dp))
-        
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("💊 Usages médicinaux", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -526,9 +470,7 @@ fun PlantDetailScreen() {
                 Text(plant.medicinalUses, fontSize = 14.sp)
             }
         }
-        
         Spacer(modifier = Modifier.height(16.dp))
-        
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("🌍 Usages écologiques", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -536,9 +478,7 @@ fun PlantDetailScreen() {
                 Text(plant.ecologicalUses, fontSize = 14.sp)
             }
         }
-        
         Spacer(modifier = Modifier.height(16.dp))
-        
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("📍 Répartition en Algérie", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -553,43 +493,27 @@ fun PlantDetailScreen() {
 fun MapScreen(context: Context) {
     val locations = getLocations(context)
     var showAddSamples by remember { mutableStateOf(false) }
-    
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Carte des découvertes", fontWeight = FontWeight.Bold, fontSize = 24.sp)
             Row {
                 if (locations.isEmpty()) {
-                    Button(onClick = { showAddSamples = true }) {
-                        Text("📍 Ajouter exemples")
-                    }
+                    Button(onClick = { showAddSamples = true }) { Text("📍 Ajouter exemples") }
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 TextButton(onClick = { currentScreen = "main" }) { Text("← Retour") }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
-        
         if (showAddSamples) {
             AlertDialog(
                 onDismissRequest = { showAddSamples = false },
                 title = { Text("Ajouter des exemples") },
-                text = { Text("Voulez-vous ajouter 3 plantes exemples (Naâma, Alger, Biskra) pour tester la carte ?") },
-                confirmButton = {
-                    Button(onClick = {
-                        addSampleLocations(context)
-                        showAddSamples = false
-                    }) {
-                        Text("Ajouter")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showAddSamples = false }) {
-                        Text("Annuler")
-                    }
-                }
+                text = { Text("Voulez-vous ajouter 3 plantes exemples ?") },
+                confirmButton = { Button(onClick = { addSampleLocations(context); showAddSamples = false }) { Text("Ajouter") } },
+                dismissButton = { TextButton(onClick = { showAddSamples = false }) { Text("Annuler") } }
             )
         }
-        
         if (locations.isEmpty()) {
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4))) {
                 Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -597,15 +521,12 @@ fun MapScreen(context: Context) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Aucune plante géolocalisée", fontWeight = FontWeight.Bold, fontSize = 16.sp, textAlign = TextAlign.Center)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Pour voir la carte fonctionner :", fontSize = 14.sp, textAlign = TextAlign.Center)
-                    Text("1. Cliquez sur 'Ajouter exemples' ci-dessus", fontSize = 14.sp, textAlign = TextAlign.Center)
-                    Text("2. OU identifiez une nouvelle plante avec internet + GPS activé", fontSize = 14.sp, textAlign = TextAlign.Center)
+                    Text("Identifiez une plante ou ajoutez des exemples.", fontSize = 14.sp, textAlign = TextAlign.Center)
                 }
             }
         } else {
-            Text("${locations.size} découverte(s) géolocalisée(s)", fontSize = 14.sp, color = Color.Gray)
+            Text("${locations.size} découverte(s)", fontSize = 14.sp, color = Color.Gray)
             Spacer(modifier = Modifier.height(16.dp))
-            
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 locations.forEach { loc ->
                     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -615,10 +536,7 @@ fun MapScreen(context: Context) {
                             Text("📍 ${loc.latitude}, ${loc.longitude}", fontSize = 12.sp, color = NaamaGreen)
                             Text(loc.date, fontSize = 10.sp, color = Color.Gray)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Button(
-                                onClick = { openGoogleMaps(context, loc.latitude, loc.longitude, loc.name) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            Button(onClick = { openGoogleMaps(context, loc.latitude, loc.longitude, loc.name) }, modifier = Modifier.fillMaxWidth()) {
                                 Text("🗺️ Ouvrir dans Google Maps")
                             }
                         }
@@ -635,56 +553,51 @@ suspend fun identifyPlantDualAI(context: Context, bitmap: Bitmap, organ: String)
             val outputStream = ByteArrayOutputStream()
             bitmap.compress(Bitmap.CompressFormat.JPEG, 50, outputStream)
             val byteArray = outputStream.toByteArray()
-
             val client = OkHttpClient.Builder()
                 .connectTimeout(45, TimeUnit.SECONDS)
                 .readTimeout(45, TimeUnit.SECONDS)
                 .writeTimeout(45, TimeUnit.SECONDS)
                 .build()
             
-            // Lancer les deux APIs en parallèle
-            val plantNetDeferred = async { callPlantNetAPI(client, byteArray, organ) }
-            val iNaturalistDeferred = async { callINaturalistAPI(client, byteArray) }
+            val plantNetResult = callPlantNetAPI(client, byteArray, organ)
+            val iNaturalistResult = callINaturalistAPI(client, byteArray)
             
-            val plantNetResult = plantNetDeferred.await()
-            val iNaturalistResult = iNaturalistDeferred.await()
-            
-            // Fusionner les résultats
             val combinedResults = mutableListOf<IdentificationResult>()
-            
             plantNetResult?.let { combinedResults.addAll(it) }
             iNaturalistResult?.let { combinedResults.addAll(it) }
             
-            // Vérifier s'il y a des correspondances entre les deux APIs
             val matchedResults = combinedResults.groupBy { it.scientificName.lowercase() }
-                .filter { it.value.size > 1 } // Plantes identifiées par les deux APIs
+                .filter { it.value.size > 1 }
             
             var resultText = ""
-            
             if (matchedResults.isNotEmpty()) {
                 resultText += "✅ CONFIRMÉ PAR LES DEUX IA :\n\n"
                 matchedResults.forEach { (scientific, results) ->
                     val bestResult = results.maxByOrNull { it.confidence }!!
                     resultText += "🌟 ${bestResult.commonName}\n"
                     resultText += "   Nom scientifique: $scientific\n"
-                    resultText += "   Confiance combinée: ${bestResult.confidence}%\n"
-                    resultText += "   Sources: PlantNet + iNaturalist\n\n"
+                    resultText += "   Confiance combinée: ${bestResult.confidence}%\n\n"
                 }
             } else {
                 resultText += "📊 RÉSULTATS DES DEUX IA :\n\n"
-                
-                resultText += " PlantNet :\n"
-                plantNetResult?.take(2)?.forEach { result ->
-                    resultText += "   • ${result.commonName} (${result.confidence}%)\n"
-                } ?: resultText += "   Pas de résultat\n"
-                
+                resultText += "🔵 PlantNet :\n"
+                if (plantNetResult != null && plantNetResult.isNotEmpty()) {
+                    plantNetResult.take(2).forEach { result ->
+                        resultText += "   • ${result.commonName} (${result.confidence}%)\n"
+                    }
+                } else {
+                    resultText += "   Pas de résultat\n"
+                }
                 resultText += "\n🟢 iNaturalist :\n"
-                iNaturalistResult?.take(2)?.forEach { result ->
-                    resultText += "   • ${result.commonName} (${result.confidence}%)\n"
-                } ?: resultText += "   Pas de résultat\n"
+                if (iNaturalistResult != null && iNaturalistResult.isNotEmpty()) {
+                    iNaturalistResult.take(2).forEach { result ->
+                        resultText += "   • ${result.commonName} (${result.confidence}%)\n"
+                    }
+                } else {
+                    resultText += "   Pas de résultat\n"
+                }
             }
             
-            // Sauvegarder le meilleur résultat
             val bestOverall = combinedResults.maxByOrNull { it.confidence }
             if (bestOverall != null) {
                 val location = getCurrentLocation(context)
@@ -711,36 +624,32 @@ suspend fun callPlantNetAPI(client: OkHttpClient, byteArray: ByteArray, organ: S
             .setType(MultipartBody.FORM)
             .addFormDataPart("images", "plant.jpg", requestBody)
             .build()
-        
-        var url = "https://my-api.plantnet.org/v2/identify/all?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr"
+        var requestUrl = "https://my-api.plantnet.org/v2/identify/all?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr"
         if (organ != "auto") {
-            url += "&organs=$organ"
+            requestUrl += "&organs=$organ"
         }
-        
-        val request = Request.Builder().url(url).post(multipartBody).build()
+        val request = Request.Builder().url(requestUrl).post(multipartBody).build()
         val response = client.newCall(request).execute()
         val responseBody = response.body?.string()
-        
         if (response.isSuccessful && responseBody != null) {
             val json = JSONObject(responseBody)
-            val results = json.getJSONArray("results")
-            val list = mutableListOf<IdentificationResult>()
-            
-            for (i in 0 until minOf(results.length(), 3)) {
-                val result = results.getJSONObject(i)
-                val species = result.getJSONObject("species")
+            val resultsArray = json.getJSONArray("results")
+            val identificationResults = mutableListOf<IdentificationResult>()
+            val limit = min(resultsArray.length(), 3)
+            for (i in 0 until limit) {
+                val resultObj = resultsArray.getJSONObject(i)
+                val species = resultObj.getJSONObject("species")
                 val scientificName = species.getString("scientificNameWithoutAuthor")
                 val commonNames = species.optJSONArray("commonNames")
                 val commonName = if (commonNames != null && commonNames.length() > 0) commonNames.getString(0) else "Nom commun non disponible"
-                val score = result.getDouble("score")
+                val score = resultObj.getDouble("score")
                 val confidence = (score * 100).toInt()
-                
-                list.add(IdentificationResult(commonName, scientificName, confidence, "PlantNet"))
+                identificationResults.add(IdentificationResult(commonName, scientificName, confidence, "PlantNet"))
             }
-            list
+            identificationResults
         } else null
-    } catch (e: Exception) {
-        null
+    } catch (e: Exception) { 
+        null 
     }
 }
 
@@ -751,34 +660,30 @@ suspend fun callINaturalistAPI(client: OkHttpClient, byteArray: ByteArray): List
             .setType(MultipartBody.FORM)
             .addFormDataPart("image", "plant.jpg", requestBody)
             .build()
-        
         val request = Request.Builder()
             .url("https://api.inaturalist.org/v1/computervision/score_image")
             .post(multipartBody)
             .build()
-        
         val response = client.newCall(request).execute()
         val responseBody = response.body?.string()
-        
         if (response.isSuccessful && responseBody != null) {
             val json = JSONObject(responseBody)
-            val results = json.optJSONArray("results") ?: return null
-            val list = mutableListOf<IdentificationResult>()
-            
-            for (i in 0 until minOf(results.length(), 3)) {
-                val result = results.getJSONObject(i)
-                val taxon = result.getJSONObject("taxon")
+            val resultsArray = json.optJSONArray("results") ?: return null
+            val identificationResults = mutableListOf<IdentificationResult>()
+            val limit = min(resultsArray.length(), 3)
+            for (i in 0 until limit) {
+                val resultObj = resultsArray.getJSONObject(i)
+                val taxon = resultObj.getJSONObject("taxon")
                 val scientificName = taxon.getString("name")
                 val commonName = taxon.optString("preferred_common_name", "Nom commun non disponible")
-                val score = result.getDouble("score")
+                val score = resultObj.getDouble("score")
                 val confidence = (score * 100).toInt()
-                
-                list.add(IdentificationResult(commonName, scientificName, confidence, "iNaturalist"))
+                identificationResults.add(IdentificationResult(commonName, scientificName, confidence, "iNaturalist"))
             }
-            list
+            identificationResults
         } else null
-    } catch (e: Exception) {
-        null
+    } catch (e: Exception) { 
+        null 
     }
 }
 
