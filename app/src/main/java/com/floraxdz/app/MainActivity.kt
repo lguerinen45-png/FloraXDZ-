@@ -26,6 +26,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -237,7 +240,7 @@ fun SplashScreen() {
             Text("Conçu par", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
             Text("Pr. GUERINE Lakhdar", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Yellow, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Algérie 🇩🇿 • 2026", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+            Text("Algérie 🇩 • 2026", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
         }
     }
 }
@@ -314,7 +317,7 @@ fun MainContent(
             Spacer(modifier = Modifier.height(16.dp))
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4))) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("📸 Conseils :", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(" Conseils :", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text("• Photo nette et bien éclairée", fontSize = 12.sp)
                     Text("• Un seul organe à la fois", fontSize = 12.sp)
                     Text("• Plante = 70% de la photo", fontSize = 12.sp)
@@ -403,24 +406,84 @@ fun HistoryScreen(context: Context) {
     }
 }
 
+// 🆕 NOUVEAU : Catalogue avec recherche intelligente
 @Composable
 fun CatalogueScreen() {
+    var searchQuery by remember { mutableStateOf("") }
+    
+    // Filtrage intelligent : cherche dans le nom français, scientifique ET arabe
+    val filteredPlants = algerianPlants.filter { plant ->
+        searchQuery.isEmpty() || 
+        plant.commonName.contains(searchQuery, ignoreCase = true) ||
+        plant.scientificName.contains(searchQuery, ignoreCase = true) ||
+        plant.arabicName.contains(searchQuery, ignoreCase = true) ||
+        plant.family.contains(searchQuery, ignoreCase = true)
+    }
+    
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Catalogue des plantes", fontWeight = FontWeight.Bold, fontSize = 24.sp)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Catalogue", fontWeight = FontWeight.Bold, fontSize = 24.sp)
             TextButton(onClick = { currentScreen = "main" }) { Text("← Retour") }
         }
         Spacer(modifier = Modifier.height(16.dp))
-        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-            algerianPlants.forEach { plant ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
-                    selectedPlant = plant
-                    currentScreen = "plantDetail"
-                }) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(plant.commonName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text(plant.scientificName, fontStyle = FontStyle.Italic, fontSize = 12.sp, color = Color.DarkGray)
-                        Text(plant.arabicName, fontSize = 14.sp, color = NaamaGreen)
+        
+        //  Barre de recherche stylisée
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("🔍 Rechercher (nom, espèce, famille...)") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Rechercher") },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Effacer")
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = NaamaGreen,
+                unfocusedBorderColor = Color.LightGray
+            )
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Compteur de résultats
+        if (searchQuery.isNotEmpty()) {
+            Text(
+                "${filteredPlants.size} résultat(s) trouvé(s)",
+                fontSize = 12.sp,
+                color = Color.Gray,
+                modifier = Modifier.padding(start = 4.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        
+        if (filteredPlants.isEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4))) {
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("🔍", fontSize = 48.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Aucune plante trouvée", fontWeight = FontWeight.Bold, fontSize = 16.sp, textAlign = TextAlign.Center)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Essayez un autre terme de recherche.", fontSize = 14.sp, textAlign = TextAlign.Center)
+                }
+            }
+        } else {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                filteredPlants.forEach { plant ->
+                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
+                        selectedPlant = plant
+                        currentScreen = "plantDetail"
+                    }) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(plant.commonName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(plant.scientificName, fontStyle = FontStyle.Italic, fontSize = 12.sp, color = Color.DarkGray)
+                            Text(plant.arabicName, fontSize = 14.sp, color = NaamaGreen)
+                        }
                     }
                 }
             }
@@ -449,7 +512,7 @@ fun PlantDetailScreen() {
         Spacer(modifier = Modifier.height(16.dp))
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("📖 Description", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(" Description", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(plant.description, fontSize = 14.sp)
             }
@@ -529,7 +592,7 @@ fun MapScreen(context: Context) {
                             Text(loc.date, fontSize = 10.sp, color = Color.Gray)
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(onClick = { openGoogleMaps(context, loc.latitude, loc.longitude, loc.name) }, modifier = Modifier.fillMaxWidth()) {
-                                Text("🗺️ Ouvrir dans Google Maps")
+                                Text("️ Ouvrir dans Google Maps")
                             }
                         }
                     }
@@ -591,7 +654,6 @@ suspend fun identifyPlant(context: Context, bitmap: Bitmap, organ: String) {
                         bestConfidence = confidence
                     }
                     
-                    // Mise en forme améliorée avec le nom scientifique bien visible
                     resultText += "🌟 ${i + 1}. $commonName\n"
                     resultText += "   📜 Nom scientifique : $scientificName\n"
                     resultText += "   📊 Confiance : $confidence%\n\n"
