@@ -12,13 +12,13 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,13 +26,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -43,8 +47,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -54,10 +58,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.FileOutputStream
 import java.io.InputStream
-import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -77,16 +78,7 @@ data class PlantInfo(
     val ecologicalUses: String,
     val distribution: String,
     val symptoms: List<String>,
-    val conservationStatus: String // 🆕 UICN: LC, NT, VU, EN, CR, EX, DD
-)
-
-data class PlantLocation(
-    val name: String,
-    val scientificName: String,
-    val latitude: Double,
-    val longitude: Double,
-    val date: String,
-    val confidence: Int
+    val conservationStatus: String
 )
 
 data class GBIFResult(
@@ -94,7 +86,6 @@ data class GBIFResult(
     val regions: List<String>
 )
 
-// 🆕 Fonction pour obtenir la couleur et le libellé du statut UICN
 fun getConservationInfo(status: String): Pair<Color, String> {
     return when (status.uppercase()) {
         "LC" -> Color(0xFF4CAF50) to "Préoccupation mineure"
@@ -130,7 +121,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            // 🆕 Détection automatique du thème système (Dark Mode)
             val darkTheme = isSystemInDarkTheme()
             MaterialTheme(
                 colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
@@ -144,7 +134,6 @@ class MainActivity : ComponentActivity() {
 var selectedImageUri by mutableStateOf<Uri?>(null)
 var selectedBitmap by mutableStateOf<Bitmap?>(null)
 var identificationResult by mutableStateOf<String?>(null)
-var gbifValidation by mutableStateOf<GBIFResult?>(null)
 var isProcessing by mutableStateOf(false)
 var selectedOrgan by mutableStateOf("auto")
 var currentScreen by mutableStateOf("main")
@@ -210,14 +199,11 @@ fun getHistory(context: Context): List<JSONObject> {
     return resultList.reversed()
 }
 
-// 🆕 Fonction d'export CSV
-fun exportHistoryToCSV(context: Context): File? {
+fun getHistoryAsCSV(context: Context): String {
     val history = getHistory(context)
-    if (history.isEmpty()) return null
-    
+    if (history.isEmpty()) return ""
     val csvContent = StringBuilder()
     csvContent.appendLine("Nom,Nom scientifique,Date,Confiance (%),Latitude,Longitude")
-    
     history.forEach { item ->
         val name = item.getString("name").replace(",", ";")
         val scientific = item.getString("scientific").replace(",", ";")
@@ -227,52 +213,176 @@ fun exportHistoryToCSV(context: Context): File? {
         val lng = item.optDouble("longitude", 0.0)
         csvContent.appendLine("$name,$scientific,$date,$confidence,$lat,$lng")
     }
-    
-    val cacheDir = context.cacheDir
-    val csvFile = File(cacheDir, "FloraXDZ_Historique_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.csv")
-    
-    return try {
-        FileOutputStream(csvFile).use { fos ->
-            fos.write(csvContent.toString().toByteArray())
-        }
-        csvFile
-    } catch (e: Exception) {
-        null
-    }
+    return csvContent.toString()
 }
 
 @Composable
 fun FloraXDZApp() {
     var showSplash by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(3000)
+        delay(4000)
         showSplash = false
     }
-    if (showSplash) SplashScreen() else MainScreen()
+    if (showSplash) AnimatedSplashScreen() else MainScreen()
 }
 
+// 🆕 SPLASH SCREEN ANIMÉ ET ÉLÉGANT
 @Composable
-fun SplashScreen() {
+fun AnimatedSplashScreen() {
+    val infiniteTransition = rememberInfiniteTransition(label = "splash")
+    
+    // Animations
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = EaseInOutCubic),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+    
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = EaseInOutCubic),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+    
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
+    
     Box(
-        modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(colors = listOf(NaamaGreen, NaamaGreenLight))),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        NaamaGreen,
+                        NaamaGreenLight,
+                        Color(0xFF81C784)
+                    )
+                )
+            ),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Text("🌿", fontSize = 100.sp)
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("FloraXDZ", fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center)
+        // Cercle décoratif animé en arrière-plan
+        Box(
+            modifier = Modifier
+                .size(300.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.1f))
+                .scale(scale)
+                .alpha(alpha)
+        )
+        
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp)
+        ) {
+            // Logo animé
+            Text(
+                "🌿",
+                fontSize = 120.sp,
+                modifier = Modifier
+                    .scale(scale)
+                    .alpha(alpha)
+            )
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Titre principal
+            Text(
+                "FloraXDZ",
+                fontSize = 56.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.alpha(alpha)
+            )
+            
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Application d'identification", fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
-            Text("des plantes d'Algérie", fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f), textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.height(24.dp))
-            Box(modifier = Modifier.width(80.dp).height(4.dp).background(NaamaRed))
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("Université de Naâma", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.White, textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.height(12.dp))
-            Text("Conçu par", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
-            Text("Pr. GUERINE Lakhdar", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Yellow, textAlign = TextAlign.Center)
+            
+            // Sous-titre
+            Text(
+                "Application d'identification",
+                fontSize = 18.sp,
+                color = Color.White.copy(alpha = 0.95f),
+                textAlign = TextAlign.Center
+            )
+            Text(
+                "des plantes d'Algérie",
+                fontSize = 18.sp,
+                color = Color.White.copy(alpha = 0.95f),
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Ligne décorative
+            Box(
+                modifier = Modifier
+                    .width(100.dp)
+                    .height(3.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                NaamaRed,
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Université
+            Text(
+                "Université de Naâma",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
+            
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Algérie 🇩🇿 • 2026", fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+            
+            // Concepteur
+            Text(
+                "Conçu par",
+                fontSize = 16.sp,
+                color = Color.White.copy(alpha = 0.85f),
+                textAlign = TextAlign.Center
+            )
+            Text(
+                "Pr. GUERINE Lakhdar",
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFFEB3B),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.alpha(alpha)
+            )
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Année et drapeau
+            Text(
+                "Algérie 🇩🇿 • 2026",
+                fontSize = 16.sp,
+                color = Color.White.copy(alpha = 0.9f),
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -318,7 +428,7 @@ fun MainContent(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("Identifiez les plantes en Algérie", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("🤖 IA : PlantNet + 🌍 Validation GBIF", fontSize = 12.sp, color = NaamaGreen, fontWeight = FontWeight.Medium)
+            Text("🤖 IA : PlantNet", fontSize = 12.sp, color = NaamaGreen, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(16.dp))
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -379,11 +489,10 @@ fun MainContent(
                 Button(onClick = {
                     isProcessing = true
                     identificationResult = "Analyse en cours..."
-                    gbifValidation = null
-                    scope.launch { identifyPlantWithValidation(context, bitmap, selectedOrgan) }
+                    scope.launch { identifyPlant(context, bitmap, selectedOrgan) }
                 }, modifier = Modifier.fillMaxWidth(), enabled = !isProcessing) {
                     if (isProcessing) { CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White); Spacer(modifier = Modifier.width(8.dp)) }
-                    Text(if (isProcessing) "Identification + Validation..." else "Identifier la plante")
+                    Text(if (isProcessing) "Identification..." else "Identifier la plante")
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -393,29 +502,11 @@ fun MainContent(
                         Text("Résultat de l'identification :", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(result, fontSize = 16.sp, lineHeight = 20.sp)
-                        gbifValidation?.let { gbif ->
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text("🌍 Validation Scientifique (GBIF)", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF1565C0))
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("✅ Cette espèce a été observée", fontSize = 14.sp)
-                                    Text("${gbif.count} fois en Algérie par des scientifiques", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = NaamaGreen)
-                                    if (gbif.regions.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text("Régions: ${gbif.regions.take(3).joinToString(", ")}", fontSize = 12.sp, fontStyle = FontStyle.Italic)
-                                    }
-                                }
-                            }
-                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = {
                                 val shareText = buildString {
                                     append(result)
-                                    gbifValidation?.let { gbif ->
-                                        append("\n\n Validation GBIF: ${gbif.count} observations scientifiques en Algérie")
-                                    }
                                     append("\n\n-- FloraXDZ (Pr. GUERINE Lakhdar - Université de Naâma)")
                                 }
                                 val sendIntent = Intent().apply {
@@ -429,7 +520,7 @@ fun MainContent(
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = NaamaGreen)
                         ) {
-                            Text("📤 Partager le résultat")
+                            Text(" Partager le résultat")
                         }
                     }
                 }
@@ -514,44 +605,32 @@ fun PharmacopoeiaScreen() {
     }
 }
 
-// 🆕 Historique avec bouton Export CSV
 @Composable
 fun HistoryScreen(context: Context) {
     val historyList = getHistory(context)
-    var showExportMessage by remember { mutableStateOf(false) }
     
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Historique", fontWeight = FontWeight.Bold, fontSize = 24.sp)
             Row {
-                // 🆕 Bouton Export CSV
                 if (historyList.isNotEmpty()) {
                     TextButton(onClick = {
-                        val csvFile = exportHistoryToCSV(context)
-                        if (csvFile != null) {
-                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", csvFile)
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        val csvText = getHistoryAsCSV(context)
+                        if (csvText.isNotEmpty()) {
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, csvText)
                                 type = "text/csv"
-                                putExtra(Intent.EXTRA_STREAM, uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
-                            context.startActivity(Intent.createChooser(shareIntent, "Exporter l'historique via"))
+                            context.startActivity(Intent.createChooser(sendIntent, "Exporter l'historique via"))
                         }
-                        showExportMessage = true
                     }) {
-                        Text("📊 Export CSV")
+                        Text(" Export CSV")
                     }
                 }
                 TextButton(onClick = { currentScreen = "main" }) { Text("← Retour") }
             }
         }
-        
-        if (showExportMessage) {
-            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))) {
-                Text("✅ Fichier CSV généré ! Choisissez où l'envoyer.", modifier = Modifier.padding(12.dp), fontSize = 14.sp)
-            }
-        }
-        
         Spacer(modifier = Modifier.height(16.dp))
         if (historyList.isEmpty()) {
             Text("Aucune plante identifiée.", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
@@ -572,7 +651,6 @@ fun HistoryScreen(context: Context) {
     }
 }
 
-// 🆕 Fiche détaillée avec statut UICN
 @Composable
 fun PlantDetailScreen() {
     val plant = selectedPlant ?: return
@@ -592,7 +670,6 @@ fun PlantDetailScreen() {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Famille: ${plant.family}", fontSize = 14.sp)
                 
-                // 🆕 Badge Statut UICN
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("🛡️ Statut UICN: ", fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -630,7 +707,7 @@ fun PlantDetailScreen() {
         Spacer(modifier = Modifier.height(16.dp))
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("🌍 Usages écologiques", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(" Usages écologiques", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(plant.ecologicalUses, fontSize = 14.sp)
             }
@@ -638,7 +715,7 @@ fun PlantDetailScreen() {
         Spacer(modifier = Modifier.height(16.dp))
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("📍 Répartition en Algérie", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(" Répartition en Algérie", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(plant.distribution, fontSize = 14.sp)
             }
@@ -646,40 +723,7 @@ fun PlantDetailScreen() {
     }
 }
 
-suspend fun validateWithGBIF(scientificName: String): GBIFResult {
-    return try {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .build()
-        val url = "https://api.gbif.org/v1/occurrence/search?species=${URLEncoder.encode(scientificName, "UTF-8")}&country=DZ&limit=0"
-        val request = Request.Builder().url(url).build()
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string()
-        if (response.isSuccessful && responseBody != null) {
-            val json = JSONObject(responseBody)
-            val count = json.getInt("count")
-            val regions = mutableListOf<String>()
-            val facets = json.optJSONArray("facets")
-            if (facets != null && facets.length() > 0) {
-                val counts = facets.getJSONObject(0).optJSONArray("counts")
-                if (counts != null && counts.length() > 0) {
-                    for (i in 0 until min(counts.length(), 3)) {
-                        val countObj = counts.getJSONObject(i)
-                        regions.add(countObj.getString("name"))
-                    }
-                }
-            }
-            GBIFResult(count, regions)
-        } else {
-            GBIFResult(0, emptyList())
-        }
-    } catch (e: Exception) {
-        GBIFResult(0, emptyList())
-    }
-}
-
-suspend fun identifyPlantWithValidation(context: Context, bitmap: Bitmap, organ: String) {
+suspend fun identifyPlant(context: Context, bitmap: Bitmap, organ: String) {
     try {
         withContext(Dispatchers.IO) {
             val outputStream = ByteArrayOutputStream()
@@ -722,14 +766,10 @@ suspend fun identifyPlantWithValidation(context: Context, bitmap: Bitmap, organ:
                         bestConfidence = confidence
                     }
                     resultText += "🌟 ${i + 1}. $commonName\n"
-                    resultText += "   📜 Nom scientifique : $scientificName\n"
+                    resultText += "    Nom scientifique : $scientificName\n"
                     resultText += "   📊 Confiance : $confidence%\n\n"
                 }
                 if (bestScientific.isNotEmpty()) {
-                    val gbifResult = validateWithGBIF(bestScientific)
-                    withContext(Dispatchers.Main) {
-                        gbifValidation = gbifResult
-                    }
                     val location = getCurrentLocation(context)
                     val bestName = algerianPlants.find { it.scientificName == bestScientific }?.commonName ?: "Plante identifiée"
                     saveToHistory(context, bestName, bestScientific, bestConfidence, location?.first, location?.second)
