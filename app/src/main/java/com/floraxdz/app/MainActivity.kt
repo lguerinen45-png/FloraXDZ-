@@ -73,7 +73,8 @@ data class PlantInfo(
     val description: String,
     val medicinalUses: String,
     val ecologicalUses: String,
-    val distribution: String
+    val distribution: String,
+    val symptoms: List<String> // 🆕 Pour l'assistant pharmacopée
 )
 
 data class PlantLocation(
@@ -85,24 +86,29 @@ data class PlantLocation(
     val confidence: Int
 )
 
-// 🆕 CATALOGUE ENRICHI (15 plantes maintenant)
+data class GBIFResult(
+    val count: Int,
+    val lastObservation: String,
+    val regions: List<String>
+)
+
+//  CATALOGUE ENRICHI AVEC SYMPTOMES
 val algerianPlants = listOf(
-    PlantInfo("Pistacia atlantica", "Pistachier de l'Atlas", "بطم أطلسي", "Anacardiaceae", "Arbre rustique pouvant atteindre 7m. Feuilles composées, coriaces.", "Résine contre les troubles digestifs. Feuilles en infusion respiratoire.", "Fixation des sols en zones arides.", "Atlas tellien, Hauts plateaux, Aures"),
-    PlantInfo("Pistacia terebinthus", "Pistachier térébinthe", "بطم terpentين", "Anacardiaceae", "Arbuste de 3-5m. Odeur résineuse caractéristique.", "Térébenthine en aromathérapie. Écorce astringente.", "Maquis méditerranéen. Nourriture pour les oiseaux.", "Régions côtières, Tell algérien"),
-    PlantInfo("Ziziphus lotus", "Jujubier", "سدر", "Rhamnaceae", "Arbuste épineux de 2-4m. Fruits charnus comestibles.", "Fruits calmants. Feuilles contre l'insomnie.", "Brise-vent naturel. Fixation des dunes.", "Sahara, Hauts plateaux"),
-    PlantInfo("Olea europaea", "Olivier", "زيتون", "Oleaceae", "Arbre emblématique méditerranéen. Fruits pour l'huile.", "Huile pour la peau et les brûlures. Feuilles hypotensives.", "Culture millénaire. Lutte contre l'érosion.", "Kabylie, Tell, régions côtières"),
-    PlantInfo("Stipa tenacissima", "Alfa", "حلفاء", "Poaceae", "Graminée vivace formant des touffes denses.", "Fibres pour l'artisanat (vannerie, cordes).", "Fixation des sols steppiques. Pâturage pour les ovins.", "Steppes, Hauts plateaux"),
-    PlantInfo("Phoenix dactylifera", "Palmier dattier", "نخيل", "Arecaceae", "Palmier de 15-25m. Fruits (dattes) très nutritifs.", "Dattes énergétiques. Noyaux en infusion digestive.", "Écosystème oasien complet.", "Sahara, Biskra, El Oued, Adrar"),
-    PlantInfo("Ceratonia siliqua", "Caroubier", "خروب", "Fabaceae", "Arbre de 10-15m. Gousses brunes comestibles.", "Pulpe contre la diarrhée. Gomme alimentaire.", "Ombrage en zones arides.", "Tell, Kabylie"),
-    PlantInfo("Quercus ilex", "Chêne vert", "بلوط أخضر", "Fagaceae", "Arbre de 10-20m. Feuilles persistantes coriaces.", "Écorce tannique. Glands nutritifs.", "Forêts méditerranéennes. Protection des sources.", "Kabylie, Tell, Atlas blidéen"),
-    PlantInfo("Cupressus sempervirens", "Cyprès", "سرو", "Cupressaceae", "Arbre de 15-25m. Port colonnaire caractéristique.", "Huile essentielle anticatarrhale. Bois imputrescible.", "Brise-vent. Lutte contre l'érosion éolienne.", "Régions côtières, Tell"),
-    PlantInfo("Pinus halepensis", "Pin d'Alep", "صنوبر حلبي", "Pinaceae", "Conifère de 15-20m. Écorce rougeâtre.", "Résine antiseptique. Aiguilles en infusion vitaminées.", "Reboisement. Habitat pour la faune forestière.", "Tell, Atlas, régions montagneuses"),
-    // 🆕 NOUVELLES PLANTES MÉDICINALES
-    PlantInfo("Rosmarinus officinalis", "Romarin", "إكليل الجبل", "Lamiaceae", "Arbuste aromatique de 1-2m. Feuilles en aiguilles.", "Stimulant digestif, tonique général, améliore la circulation.", "Plante mellifère. Parfum de la garrigue.", "Tell, Atlas, zones montagneuses"),
-    PlantInfo("Lavandula stoechas", "Lavande stéchade", "خزامى", "Lamiaceae", "Arbuste de 30-60cm. Fleurs violettes en épi.", "Antiseptique, cicatrisant, calmant pour les brûlures.", "Protection des sols. Attracteur de pollinisateurs.", "Régions méditerranéennes, Kabylie"),
-    PlantInfo("Tetraclinis articulata", "Thuya de Barbarie", "العارعر", "Cupressaceae", "Conifère endémique de 5-15m. Feuilles en écailles.", "Huile essentielle puissante (fongicide). Bois précieux.", "Espèce endémique protégée. Lutte contre la désertification.", "Atlas tellien (forêt de Theniet El Had)"),
-    PlantInfo("Juniperus phoenicea", "Genévrier de Phénicie", "العرعار", "Cupressaceae", "Arbuste ou arbre de 2-15m. Fruits (galbules) noirs.", "Baies diurétiques et antiseptiques urinaires.", "Fixation des dunes côtières et des falaises.", "Littoral méditerranéen, steppes"),
-    PlantInfo("Artemisia herba-alba", "Armoise blanche", "شيح", "Asteraceae", "Sous-arbuste grisâtre de 20-40cm. Odeur forte.", "Vermifuge, antidiabétique traditionnel, digestif.", "Plante pastorale importante. Indicateur de surpâturage.", "Hauts plateaux, steppes, Sud")
+    PlantInfo("Pistacia atlantica", "Pistachier de l'Atlas", "بطم أطلسي", "Anacardiaceae", "Arbre rustique pouvant atteindre 7m. Feuilles composées, coriaces.", "Résine contre les troubles digestifs. Feuilles en infusion respiratoire.", "Fixation des sols en zones arides.", "Atlas tellien, Hauts plateaux, Aures", listOf("Digestion", "Respiration", "Inflammation")),
+    PlantInfo("Pistacia terebinthus", "Pistachier térébinthe", "بطم terpentين", "Anacardiaceae", "Arbuste de 3-5m. Odeur résineuse caractéristique.", "Térébenthine en aromathérapie. Écorce astringente.", "Maquis méditerranéen.", "Régions côtières, Tell algérien", listOf("Peau", "Cicatrisation", "Douleur")),
+    PlantInfo("Ziziphus lotus", "Jujubier", "سدر", "Rhamnaceae", "Arbuste épineux de 2-4m. Fruits charnus comestibles.", "Fruits calmants. Feuilles contre l'insomnie.", "Brise-vent naturel.", "Sahara, Hauts plateaux", listOf("Insomnie", "Stress", "Digestion")),
+    PlantInfo("Olea europaea", "Olivier", "زيتون", "Oleaceae", "Arbre emblématique méditerranéen.", "Huile pour la peau. Feuilles hypotensives.", "Culture millénaire.", "Kabylie, Tell, régions côtières", listOf("Tension", "Peau", "Cœur")),
+    PlantInfo("Stipa tenacissima", "Alfa", "حلفاء", "Poaceae", "Graminée vivace formant des touffes denses.", "Fibres pour l'artisanat.", "Fixation des sols steppiques.", "Steppes, Hauts plateaux", listOf("Artisanat", "Construction")),
+    PlantInfo("Phoenix dactylifera", "Palmier dattier", "نخيل", "Arecaceae", "Palmier de 15-25m. Fruits (dattes) très nutritifs.", "Dattes énergétiques. Noyaux en infusion digestive.", "Écosystème oasien complet.", "Sahara, Biskra, El Oued, Adrar", listOf("Énergie", "Digestion", "Anémie")),
+    PlantInfo("Ceratonia siliqua", "Caroubier", "خروب", "Fabaceae", "Arbre de 10-15m. Gousses brunes comestibles.", "Pulpe contre la diarrhée.", "Ombrage en zones arides.", "Tell, Kabylie", listOf("Diarrhée", "Digestion", "Enfants")),
+    PlantInfo("Quercus ilex", "Chêne vert", "بلوط أخضر", "Fagaceae", "Arbre de 10-20m. Feuilles persistantes coriaces.", "Écorce tannique. Glands nutritifs.", "Forêts méditerranéennes.", "Kabylie, Tell, Atlas blidéen", listOf("Diarrhée", "Peau", "Gorge")),
+    PlantInfo("Cupressus sempervirens", "Cyprès", "سرو", "Cupressaceae", "Arbre de 15-25m. Port colonnaire caractéristique.", "Huile essentielle anticatarrhale.", "Brise-vent.", "Régions côtières, Tell", listOf("Toux", "Respiration", "Circulation")),
+    PlantInfo("Pinus halepensis", "Pin d'Alep", "صنوبر حلبي", "Pinaceae", "Conifère de 15-20m. Écorce rougeâtre.", "Résine antiseptique. Aiguilles en infusion vitaminées.", "Reboisement.", "Tell, Atlas, régions montagneuses", listOf("Respiration", "Vitamines", "Peau")),
+    PlantInfo("Rosmarinus officinalis", "Romarin", "إكليل الجبل", "Lamiaceae", "Arbuste aromatique de 1-2m. Feuilles en aiguilles.", "Stimulant digestif, tonique général, circulation.", "Plante mellifère.", "Tell, Atlas, zones montagneuses", listOf("Digestion", "Mémoire", "Circulation", "Fatigue")),
+    PlantInfo("Lavandula stoechas", "Lavande stéchade", "خزامى", "Lamiaceae", "Arbuste de 30-60cm. Fleurs violettes en épi.", "Antiseptique, cicatrisant, calmant.", "Protection des sols.", "Régions méditerranéennes, Kabylie", listOf("Brûlure", "Stress", "Sommeil", "Peau")),
+    PlantInfo("Tetraclinis articulata", "Thuya de Barbarie", "العارعر", "Cupressaceae", "Conifère endémique de 5-15m. Feuilles en écailles.", "Huile essentielle puissante (fongicide).", "Espèce endémique protégée.", "Atlas tellien", listOf("Champignons", "Peau", "Rhumatisme")),
+    PlantInfo("Juniperus phoenicea", "Genévrier de Phénicie", "العرعار", "Cupressaceae", "Arbuste ou arbre de 2-15m. Fruits (galbules) noirs.", "Baies diurétiques et antiseptiques urinaires.", "Fixation des dunes côtières.", "Littoral méditerranéen, steppes", listOf("Urinaire", "Digestion", "Rhumatisme")),
+    PlantInfo("Artemisia herba-alba", "Armoise blanche", "شيح", "Asteraceae", "Sous-arbuste grisâtre de 20-40cm. Odeur forte.", "Vermifuge, antidiabétique traditionnel, digestif.", "Plante pastorale importante.", "Hauts plateaux, steppes, Sud", listOf("Diabète", "Vers", "Digestion", "Foie"))
 )
 
 class MainActivity : ComponentActivity() {
@@ -119,6 +125,7 @@ class MainActivity : ComponentActivity() {
 var selectedImageUri by mutableStateOf<Uri?>(null)
 var selectedBitmap by mutableStateOf<Bitmap?>(null)
 var identificationResult by mutableStateOf<String?>(null)
+var gbifValidation by mutableStateOf<GBIFResult?>(null)
 var isProcessing by mutableStateOf(false)
 var selectedOrgan by mutableStateOf("auto")
 var currentScreen by mutableStateOf("main")
@@ -233,7 +240,7 @@ fun SplashScreen() {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Text("🌿", fontSize = 100.sp)
+            Text("", fontSize = 100.sp)
             Spacer(modifier = Modifier.height(24.dp))
             Text("FloraXDZ", fontSize = 42.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(16.dp))
@@ -265,13 +272,13 @@ fun MainScreen() {
         hasLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         if (hasCameraPermission) cameraLauncher.launch(null)
     }
-    val organs = listOf("auto" to " Auto", "leaf" to " Feuille", "flower" to " Fleur", "fruit" to "🍎 Fruit", "bark" to "🌳 Écorce", "stem" to "🌱 Tige")
+    val organs = listOf("auto" to " Auto", "leaf" to " Feuille", "flower" to "🌸 Fleur", "fruit" to "🍎 Fruit", "bark" to "🌳 Écorce", "stem" to "🌱 Tige")
     when (currentScreen) {
         "main" -> MainContent(context, scope, hasCameraPermission, hasLocationPermission, cameraLauncher, galleryLauncher, permissionLauncher, organs)
         "history" -> HistoryScreen(context)
         "catalogue" -> CatalogueScreen()
         "plantDetail" -> PlantDetailScreen()
-        "map" -> MapScreen(context)
+        "pharmacopoeia" -> PharmacopoeiaScreen()
     }
 }
 
@@ -293,12 +300,12 @@ fun MainContent(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("Identifiez les plantes en Algérie", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(" IA : PlantNet (Base mondiale)", fontSize = 12.sp, color = NaamaGreen, fontWeight = FontWeight.Medium)
+            Text("🤖 IA : PlantNet + 🌍 Validation GBIF", fontSize = 12.sp, color = NaamaGreen, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 TextButton(onClick = { currentScreen = "catalogue" }) { Text("📚 Catalogue") }
+                TextButton(onClick = { currentScreen = "pharmacopoeia" }) { Text("💊 Remèdes") }
                 TextButton(onClick = { currentScreen = "history" }) { Text("📜 Historique") }
-                TextButton(onClick = { currentScreen = "map" }) { Text("🗺️ Carte") }
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text("Quel organe photographiez-vous ?", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -324,7 +331,7 @@ fun MainContent(
             Spacer(modifier = Modifier.height(16.dp))
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4))) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text(" Conseils :", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("📸 Conseils :", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text("• Photo nette et bien éclairée", fontSize = 12.sp)
                     Text("• Un seul organe à la fois", fontSize = 12.sp)
                     Text("• Plante = 70% de la photo", fontSize = 12.sp)
@@ -353,10 +360,11 @@ fun MainContent(
                 Button(onClick = {
                     isProcessing = true
                     identificationResult = "Analyse en cours..."
-                    scope.launch { identifyPlant(context, bitmap, selectedOrgan) }
+                    gbifValidation = null
+                    scope.launch { identifyPlantWithValidation(context, bitmap, selectedOrgan) }
                 }, modifier = Modifier.fillMaxWidth(), enabled = !isProcessing) {
                     if (isProcessing) { CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White); Spacer(modifier = Modifier.width(8.dp)) }
-                    Text(if (isProcessing) "Identification..." else "Identifier la plante")
+                    Text(if (isProcessing) "Identification + Validation..." else "Identifier la plante")
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -366,13 +374,44 @@ fun MainContent(
                         Text("Résultat de l'identification :", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(result, fontSize = 16.sp, lineHeight = 20.sp)
+                        
+                        // 🆕 AFFICHAGE VALIDATION GBIF
+                        gbifValidation?.let { gbif ->
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(" Validation Scientifique (GBIF)", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF1565C0))
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("✅ Cette espèce a été observée", fontSize = 14.sp)
+                                    Text("${gbif.count} fois en Algérie par des scientifiques", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = NaamaGreen)
+                                    if (gbif.regions.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text("Régions: ${gbif.regions.take(3).joinToString(", ")}", fontSize = 12.sp, fontStyle = FontStyle.Italic)
+                                    }
+                                    if (gbif.lastObservation.isNotEmpty()) {
+                                        Text("Dernière observation: ${gbif.lastObservation}", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                        
                         Spacer(modifier = Modifier.height(16.dp))
                         // 🆕 BOUTON PARTAGER
                         Button(
                             onClick = {
+                                val shareText = buildString {
+                                    append(result)
+                                    gbifValidation?.let { gbif ->
+                                        append("\n\n🌍 Validation GBIF: ${gbif.count} observations scientifiques en Algérie")
+                                    }
+                                    append("\n\n-- FloraXDZ (Pr. GUERINE Lakhdar - Université de Naâma)")
+                                }
                                 val sendIntent = Intent().apply {
                                     action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, result + "\n\n-- Identifié avec FloraXDZ (Pr. GUERINE Lakhdar)")
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
                                     type = "text/plain"
                                 }
                                 val shareIntent = Intent.createChooser(sendIntent, "Partager via")
@@ -381,13 +420,96 @@ fun MainContent(
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = NaamaGreen)
                         ) {
-                            Text(" Partager le résultat")
+                            Text("📤 Partager le résultat")
                         }
                     }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text("Pr. GUERINE Lakhdar • 2026", fontSize = 10.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+// 🆕 NOUVEAU : Écran Assistant Pharmacopée
+@Composable
+fun PharmacopoeiaScreen() {
+    val allSymptoms = algerianPlants.flatMap { it.symptoms }.distinct().sorted()
+    var selectedSymptom by remember { mutableStateOf<String?>(null) }
+    
+    val filteredPlants = if (selectedSymptom == null) {
+        emptyList()
+    } else {
+        algerianPlants.filter { selectedSymptom in it.symptoms }
+    }
+    
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("💊 Pharmacopée Traditionnelle", fontWeight = FontWeight.Bold, fontSize = 22.sp)
+            TextButton(onClick = { currentScreen = "main" }) { Text("← Retour") }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text("Sélectionnez un symptôme :", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // Grille de symptômes
+        LazyVerticalGrid(
+            columns = androidx.compose.foundation.layout.GridCells.Adaptive(minSize = 100.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.height(200.dp)
+        ) {
+            items(allSymptoms.size) { index ->
+                val symptom = allSymptoms[index]
+                val isSelected = selectedSymptom == symptom
+                Card(
+                    modifier = Modifier
+                        .clickable { selectedSymptom = if (isSelected) null else symptom }
+                        .fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected) NaamaGreen else Color.LightGray.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Text(
+                        text = symptom,
+                        modifier = Modifier.padding(12.dp),
+                        textAlign = TextAlign.Center,
+                        color = if (isSelected) Color.White else Color.Black,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        if (selectedSymptom != null) {
+            Text("Plantes recommandées pour : $selectedSymptom", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (filteredPlants.isEmpty()) {
+                Text("Aucune plante trouvée pour ce symptôme.", color = Color.Gray)
+            } else {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    filteredPlants.forEach { plant ->
+                        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
+                            selectedPlant = plant
+                            currentScreen = "plantDetail"
+                        }) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(plant.commonName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text(plant.scientificName, fontStyle = FontStyle.Italic, fontSize = 12.sp, color = Color.DarkGray)
+                                Text(plant.arabicName, fontSize = 14.sp, color = NaamaGreen)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Usage: ${plant.medicinalUses}", fontSize = 12.sp, maxLines = 2)
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            Text("Sélectionnez un symptôme ci-dessus pour voir les plantes recommandées.", color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -420,7 +542,7 @@ fun HistoryScreen(context: Context) {
                                     Text("📍 Voir sur Google Maps")
                                 }
                             } else {
-                                Text("📍 Position non enregistrée", fontSize = 10.sp, color = Color.Gray)
+                                Text(" Position non enregistrée", fontSize = 10.sp, color = Color.Gray)
                             }
                         }
                     }
@@ -519,7 +641,7 @@ fun PlantDetailScreen() {
         Spacer(modifier = Modifier.height(16.dp))
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("💊 Usages médicinaux", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(" Usages médicinaux", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(plant.medicinalUses, fontSize = 14.sp)
             }
@@ -527,7 +649,7 @@ fun PlantDetailScreen() {
         Spacer(modifier = Modifier.height(16.dp))
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("🌍 Usages écologiques", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(" Usages écologiques", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(plant.ecologicalUses, fontSize = 14.sp)
             }
@@ -543,61 +665,47 @@ fun PlantDetailScreen() {
     }
 }
 
-@Composable
-fun MapScreen(context: Context) {
-    val locations = getLocations(context)
-    var showAddSamples by remember { mutableStateOf(false) }
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Carte des découvertes", fontWeight = FontWeight.Bold, fontSize = 24.sp)
-            Row {
-                if (locations.isEmpty()) {
-                    Button(onClick = { showAddSamples = true }) { Text("📍 Ajouter exemples") }
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                TextButton(onClick = { currentScreen = "main" }) { Text("← Retour") }
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        if (showAddSamples) {
-            AlertDialog(
-                onDismissRequest = { showAddSamples = false },
-                title = { Text("Ajouter des exemples") },
-                text = { Text("Voulez-vous ajouter 3 plantes exemples ?") },
-                confirmButton = { Button(onClick = { addSampleLocations(context); showAddSamples = false }) { Text("Ajouter") } },
-                dismissButton = { TextButton(onClick = { showAddSamples = false }) { Text("Annuler") } }
-            )
-        }
-        if (locations.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4))) {
-                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Aucune plante géolocalisée", fontWeight = FontWeight.Bold, fontSize = 16.sp, textAlign = TextAlign.Center)
-                }
-            }
-        } else {
-            Text("${locations.size} découverte(s)", fontSize = 14.sp, color = Color.Gray)
-            Spacer(modifier = Modifier.height(16.dp))
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                locations.forEach { loc ->
-                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(loc.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text(loc.scientificName, fontStyle = FontStyle.Italic, fontSize = 12.sp, color = Color.DarkGray)
-                            Text("📍 ${loc.latitude}, ${loc.longitude}", fontSize = 12.sp, color = NaamaGreen)
-                            Text(loc.date, fontSize = 10.sp, color = Color.Gray)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Button(onClick = { openGoogleMaps(context, loc.latitude, loc.longitude, loc.name) }, modifier = Modifier.fillMaxWidth()) {
-                                Text("🗺️ Ouvrir dans Google Maps")
-                            }
-                        }
+// 🆕 FONCTION DE VALIDATION GBIF
+suspend fun validateWithGBIF(scientificName: String): GBIFResult {
+    return try {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
+        
+        // Recherche des occurrences en Algérie (country code DZ)
+        val url = "https://api.gbif.org/v1/occurrence/search?species=${URLEncoder.encode(scientificName, "UTF-8")}&country=DZ&limit=0"
+        val request = Request.Builder().url(url).build()
+        val response = client.newCall(request).execute()
+        val responseBody = response.body?.string()
+        
+        if (response.isSuccessful && responseBody != null) {
+            val json = JSONObject(responseBody)
+            val count = json.getInt("count")
+            
+            // Récupérer quelques régions si disponible
+            val regions = mutableListOf<String>()
+            val facets = json.optJSONArray("facets")
+            if (facets != null && facets.length() > 0) {
+                val counts = facets.getJSONObject(0).optJSONArray("counts")
+                if (counts != null && counts.length() > 0) {
+                    for (i in 0 until min(counts.length(), 3)) {
+                        val countObj = counts.getJSONObject(i)
+                        regions.add(countObj.getString("name"))
                     }
                 }
             }
+            
+            GBIFResult(count, "", regions)
+        } else {
+            GBIFResult(0, "", emptyList())
         }
+    } catch (e: Exception) {
+        GBIFResult(0, "", emptyList())
     }
 }
 
-suspend fun identifyPlant(context: Context, bitmap: Bitmap, organ: String) {
+suspend fun identifyPlantWithValidation(context: Context, bitmap: Bitmap, organ: String) {
     try {
         withContext(Dispatchers.IO) {
             val outputStream = ByteArrayOutputStream()
@@ -610,7 +718,6 @@ suspend fun identifyPlant(context: Context, bitmap: Bitmap, organ: String) {
                 .addFormDataPart("images", "plant.jpg", requestBody)
                 .build()
             
-            // ✅ URL CORRIGÉE ET STABLE (Projet 'all' = toutes les plantes)
             var requestUrl = "https://my-api.plantnet.org/v2/identify/all?api-key=$PLANTNET_API_KEY&include-related-images=false&no-reject=false&nb-results=5&lang=fr"
             if (organ != "auto") {
                 requestUrl += "&organs=$organ"
@@ -630,7 +737,6 @@ suspend fun identifyPlant(context: Context, bitmap: Bitmap, organ: String) {
                 val json = JSONObject(responseBody)
                 val resultsArray = json.getJSONArray("results")
                 var resultText = ""
-                var bestName = ""
                 var bestScientific = ""
                 var bestConfidence = 0
                 
@@ -645,7 +751,6 @@ suspend fun identifyPlant(context: Context, bitmap: Bitmap, organ: String) {
                     val confidence = (score * 100).toInt()
                     
                     if (i == 0) {
-                        bestName = commonName
                         bestScientific = scientificName
                         bestConfidence = confidence
                     }
@@ -655,8 +760,17 @@ suspend fun identifyPlant(context: Context, bitmap: Bitmap, organ: String) {
                     resultText += "   📊 Confiance : $confidence%\n\n"
                 }
                 
-                if (bestName.isNotEmpty() && bestName != "Nom commun non disponible") {
+                // 🆕 Lancer la validation GBIF en parallèle
+                if (bestScientific.isNotEmpty()) {
+                    val gbifResult = validateWithGBIF(bestScientific)
+                    withContext(Dispatchers.Main) {
+                        gbifValidation = gbifResult
+                    }
+                    
+                    // Sauvegarder dans l'historique
                     val location = getCurrentLocation(context)
+                    val bestName = algerianPlants.find { it.scientificName == bestScientific }?.commonName 
+                        ?: resultText.split("\n")[0].removePrefix(" 1. ").substringBefore("\n")
                     saveToHistory(context, bestName, bestScientific, bestConfidence, location?.first, location?.second)
                 }
                 
